@@ -4,7 +4,7 @@ A WhatsApp support attendant that answers questions about Turbo Notify. It recei
 webhook, decides with an LLM, and replies **through the Turbo Notify MCP server**, the same tools
 any agent gets, chosen by the model rather than hard-coded here.
 
-About 950 lines, a good third of them comments explaining why. Read it in ten minutes, then change the knowledge
+About 1,100 lines, a good third of them comments explaining why. Read it in ten minutes, then change the knowledge
 file and the instructions and it is answering questions about *your* product instead.
 
 ```
@@ -101,7 +101,9 @@ MCPTools(
 That is the whole integration. The server offers 31 tools (`send_text`, `reply_to_message`,
 `get_number`, `get_message_quota`, `list_contacts` and the rest) and the model picks between
 whichever ones you hand it. This attendant is handed two, and the reasoning is the most
-transferable thing here: see "Give it the tools it needs, and no others" below.
+transferable thing here: see "Give it the tools it needs, and no others" below. A third tool,
+`send_typing_indicator`, is called directly by code rather than handed to the model at all — see
+"The third MCP call" further down.
 
 The hosted server reads your key **on every request**, so that header is the identity of every
 call the agent makes. It has no key of its own to fall back on, which is why one URL serves
@@ -167,6 +169,27 @@ attack.
 **If you widen the list,** answer this first: if a stranger talked the model into calling this tool
 with arguments of their choosing, what would they get? For a read tool the answer is "whatever it
 returns, read aloud to them".
+
+### The third MCP call, and why it is not in `ALLOWED_TOOLS`
+
+Turbo Notify handles typing indicators and read receipts on its own on every message this attendant
+sends: `reply_to_message` alone already shows "typing…" for a moment and marks the customer's
+message read before delivering, with no call and no argument of yours. That is enough on its own,
+and needs nothing from this example.
+
+What it does not cover is the gap BEFORE that: an LLM turn can take anywhere from one second to
+several tens of seconds — this attendant has seen 24s waits from provider rate limits alone — and
+for that whole stretch the customer sees nothing happening. `send_typing_indicator` closes exactly
+that gap, and `AgnoAttendant.show_typing` (`agent.py`) calls it the moment a question comes in,
+before the model has produced a word.
+
+It is not in `ALLOWED_TOOLS`, and could not safely be: it takes an arbitrary recipient, the exact
+shape "Give it the tools it needs, and no others" keeps off the model above. `show_typing` calls it
+through the MCP session directly (`MCPTools.get_session_for_run().call_tool(...)`), bypassing the
+model's own tool-calling loop entirely, with a recipient this code computed from the verified
+webhook sender — the group id for a group question, the sender's own number otherwise — never one a
+crafted message could redirect. Best-effort: a failure here costs the customer a moment of dead air,
+never the actual answer.
 
 ### Five failure modes this guards against
 

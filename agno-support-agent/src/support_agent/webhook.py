@@ -164,6 +164,13 @@ async def _answer_safely(question: Any, attendant: Attendant) -> None:
     :func:`answer` observed, not merely that it returned.
     """
     try:
+        await attendant.show_typing(question)
+    except Exception:
+        # Cosmetic: the customer sees "typing…" a moment sooner, nothing more.
+        # A failure here must never cost them the actual answer.
+        logger.debug("show_typing failed for %s", question.message_id, exc_info=True)
+
+    try:
         outcome = await answer(question, attendant)
     except Exception:
         logger.exception("Failed to answer %s on %s", question.message_id, question.number_alias)
@@ -188,10 +195,10 @@ async def _default_attendant_factory(settings: Settings) -> AsyncIterator[Attend
     torn down on exit. Building it once for the process lifetime, rather than
     per request, is what keeps a reply to about one round trip.
     """
-    from support_agent.agent import build_agent, build_mcp_tools
+    from support_agent.agent import AgnoAttendant, build_agent, build_mcp_tools
 
     async with build_mcp_tools(settings) as tools:
-        yield build_agent(settings, tools)
+        yield AgnoAttendant(agent=build_agent(settings, tools), mcp_tools=tools)
 
 
 def _warn_if_unverified(settings: Settings) -> None:

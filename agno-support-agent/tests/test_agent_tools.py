@@ -14,6 +14,13 @@ from support_agent.agent import ALLOWED_TOOLS
 
 #: Tools that pick their own recipient. Reachable from the text of an inbound
 #: message the moment one of them is in the list.
+#:
+#: `send_typing_indicator` belongs here too, and IS used by this example —
+#: `AgnoAttendant.show_typing` (`agent.py`) calls it directly through the raw
+#: MCP session, with a recipient THIS CODE computed from the verified
+#: webhook sender, never through the model's own tool-calling loop. That is
+#: what keeps it safe despite having exactly the shape this set exists to
+#: keep off `ALLOWED_TOOLS`.
 ARBITRARY_RECIPIENT_TOOLS = frozenset(
     {
         "send_text",
@@ -22,6 +29,7 @@ ARBITRARY_RECIPIENT_TOOLS = frozenset(
         "send_contact_card",
         "send_calendar_event",
         "send_cta_button",
+        "send_typing_indicator",
     }
 )
 

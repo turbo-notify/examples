@@ -30,6 +30,19 @@ class Attendant(Protocol):
         """Run one turn and return whatever the library returns."""
         ...
 
+    async def show_typing(self, question: Question) -> None:
+        """Show "typing…" to the customer while the model composes an answer.
+
+        Deliberately NOT one of the model's tools: `send_typing_indicator`
+        takes an arbitrary recipient, the same "aimable" shape `ALLOWED_TOOLS`
+        keeps away from the model for every other tool. This is called
+        directly, with the recipient THIS question's own webhook already
+        named — never one the model chose — which is what makes it safe to
+        use at all. Best-effort: a failure here must never stop the real
+        answer, so the caller is expected to swallow whatever this raises.
+        """
+        ...
+
 
 #: The tool whose success *is* the reply. Named here rather than in the log
 #: line so the check and the prompt cannot drift apart.

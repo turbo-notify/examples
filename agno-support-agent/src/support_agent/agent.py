@@ -14,15 +14,20 @@ get by asking it to do anything else.
 
 from __future__ import annotations
 
+import logging
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import dataclass
 from typing import Any
 
 from agno.agent import Agent
 from agno.tools.mcp import MCPTools
 
 from support_agent.config import ModelProvider, Settings
+from support_agent.inbound import Question
 from support_agent.knowledge import load_knowledge
+
+logger = logging.getLogger("support_agent.agent")
 
 #: The tools this attendant is given.
 #:
@@ -123,6 +128,54 @@ def build_agent(settings: Settings, tools: MCPTools) -> Agent:
     )
 
 
+def _typing_arguments(question: Question) -> dict[str, str] | None:
+    """Who `send_typing_indicator` should show "typing…" to for this question.
+
+    A group if this is a group message, the sender's own number otherwise —
+    exactly the party the eventual reply is going to. `None` when the webhook
+    named neither, which is unusable for this even though it was enough to
+    build a `Question` at all.
+    """
+    if question.group_id:
+        return {"group_id": question.group_id}
+    if question.from_number:
+        return {"number": question.from_number}
+    return None
+
+
+@dataclass
+class AgnoAttendant:
+    """The real `Attendant`: an Agno `Agent` plus the raw MCP session it
+    already holds, for the one action that deliberately bypasses the model.
+
+    `show_typing` calls `send_typing_indicator` through `MCPTools`'s own
+    session object (`call_tool`), never through the model's tool-calling
+    loop. That tool takes an arbitrary recipient — the same "aimable" shape
+    every other excluded tool has — and going around the model is what makes
+    using it here safe: the argument is one THIS CODE computed from the
+    verified webhook sender, never one a crafted message talked the model
+    into choosing.
+    """
+
+    agent: Agent
+    mcp_tools: MCPTools
+
+    async def arun(self, input: str) -> object:  # noqa: A002 - the library's name
+        return await self.agent.arun(input)
+
+    async def show_typing(self, question: Question) -> None:
+        target = _typing_arguments(question)
+        if target is None:
+            return
+        session = await self.mcp_tools.get_session_for_run()
+        result = await session.call_tool(
+            "send_typing_indicator",
+            {**target, "number_alias": question.number_alias, "is_typing": True},
+        )
+        if getattr(result, "is_error", False):
+            logger.debug("send_typing_indicator declined: %s", result)
+
+
 @contextmanager
 def _explaining_the_extra(extra: str) -> Iterator[None]:
     """Turn a missing provider SDK into an instruction, not a stack trace.
@@ -177,4 +230,10 @@ def _build_model(settings: Settings) -> Any:
     )
 
 
-__all__ = ["ALLOWED_TOOLS", "INSTRUCTIONS", "build_agent", "build_mcp_tools"]
+__all__ = [
+    "ALLOWED_TOOLS",
+    "INSTRUCTIONS",
+    "AgnoAttendant",
+    "build_agent",
+    "build_mcp_tools",
+]

@@ -31,6 +31,8 @@ def _question(**overrides: Any) -> Question:
         "preview": "How do quotas work?",
         "from_name": "Ana",
         "is_group": False,
+        "group_id": None,
+        "from_number": "5511999999999",
     }
     base.update(overrides)
     return Question(**base)

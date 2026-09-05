@@ -148,6 +148,16 @@ class Question:
     preview: str | None
     from_name: str | None
     is_group: bool
+    #: Who to show "typing…" to while the model composes an answer — the
+    #: group, if this is a group message, or the sender's own number
+    #: otherwise. Never a value the model chose: `send_typing_indicator`
+    #: takes an arbitrary recipient, same as `send_text` does, and `webhook.py`
+    #: calls it directly with THIS value rather than handing it to the model
+    #: — the whole reason it is safe to use at all despite not being in
+    #: `ALLOWED_TOOLS`. `None` when the webhook carried neither (malformed
+    #: enough to be unusable for this, not enough to reject the question).
+    group_id: str | None
+    from_number: str | None
 
 
 def parse_question(
@@ -291,8 +301,15 @@ def parse_question(
     if is_group and not answer_group_messages:
         raise InboundRejectedError("group messages are disabled for this agent")
 
+    group_id = to_party.get("group_id") if is_group and isinstance(to_party, dict) else None
+    if not isinstance(group_id, str) or not group_id:
+        group_id = None
+
     from_party = data.get("from")
     from_name = from_party.get("name") if isinstance(from_party, dict) else None
+    from_number = from_party.get("number") if isinstance(from_party, dict) else None
+    if not isinstance(from_number, str) or not from_number:
+        from_number = None
 
     return Question(
         event_id=event_id,
@@ -305,6 +322,8 @@ def parse_question(
         preview=preview,
         from_name=from_name if isinstance(from_name, str) else None,
         is_group=is_group,
+        group_id=group_id,
+        from_number=from_number,
     )
 
 

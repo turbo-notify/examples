@@ -65,18 +65,30 @@ class FakeAttendant:
     """Records the prompts it was asked to answer."""
 
     def __init__(
-        self, *, fail: bool = False, silent: bool = False, refused: str | None = None
+        self,
+        *,
+        fail: bool = False,
+        silent: bool = False,
+        refused: str | None = None,
+        fail_typing: bool = False,
     ) -> None:
         self.prompts: list[str] = []
+        self.typing_calls: list[Any] = []
         self.fail = fail
         self.silent = silent
         self.refused = refused
+        self.fail_typing = fail_typing
 
     async def arun(self, input: str) -> object:  # noqa: A002 - the library's name
         if self.fail:
             raise RuntimeError("the model is down")
         self.prompts.append(input)
         return fake_run(silent=self.silent, refused=self.refused)
+
+    async def show_typing(self, question: Any) -> None:
+        if self.fail_typing:
+            raise RuntimeError("the MCP server is down")
+        self.typing_calls.append(question)
 
 
 def _settings(**overrides: Any) -> Settings:
@@ -164,6 +176,41 @@ class TestSignedDeliveries:
         assert "How do quotas work?" in prompt
         assert "msg_" + "a" * 32 in prompt
         assert "reply_to_message" in prompt
+
+    async def test_typing_is_shown_to_the_sender_before_the_answer(self) -> None:
+        """`show_typing` runs before `arun`: the whole point is covering the
+
+        seconds the model spends composing, not the seconds after.
+        """
+        attendant = FakeAttendant()
+        body = _received_body()
+
+        async with _client(attendant) as client:
+            await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert len(attendant.typing_calls) == 1
+        assert attendant.typing_calls[0].from_number == "5511999999999"
+
+    async def test_typing_targets_the_group_for_a_group_question(self) -> None:
+        attendant = FakeAttendant()
+        settings = _settings(answer_group_messages=True)
+        body = _received_body(to={"group_id": "grp_" + "b" * 32})
+
+        async with _client(attendant, settings) as client:
+            await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert attendant.typing_calls[0].group_id == "grp_" + "b" * 32
+
+    async def test_a_typing_failure_never_costs_the_real_answer(self) -> None:
+        """Cosmetic feedback, not a gate: the customer still gets answered."""
+        attendant = FakeAttendant(fail_typing=True)
+        body = _received_body()
+
+        async with _client(attendant) as client:
+            response = await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert response.status_code == 202
+        assert len(attendant.prompts) == 1
 
     async def test_an_unsigned_delivery_is_rejected_and_never_reaches_the_attendant(
         self,

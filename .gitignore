@@ -1,0 +1,22 @@
+# Public repository. Nothing internal, nothing secret.
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.env.*
+!.env.example
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+dist/
+build/
+*.egg-info/
+
+# Internal to the Turbo Notify workspace, never part of a public example.
+.claude/
+.private/
+.codex/
+.gemini/
+graphify-out/

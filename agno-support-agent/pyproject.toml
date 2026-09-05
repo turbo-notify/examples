@@ -1,0 +1,75 @@
+[tool.poetry]
+name = "agno-support-agent"
+version = "0.1.0"
+description = "A WhatsApp support attendant built on Turbo Notify's MCP server and Agno"
+authors = ["Turbo Notify <dev@turbonotify.com>"]
+readme = "README.md"
+license = "MIT"
+packages = [{include = "support_agent", from = "src"}]
+
+# No path dependencies, deliberately. This example must build from a bare
+# `git clone` on a machine that has never seen the Turbo Notify workspace —
+# that is the whole point of an example. Everything below is on PyPI.
+[tool.poetry.dependencies]
+python = ">=3.11,<4.0"
+agno = "^3.0.6"
+# Agno's MCPTools builds its connections with fastmcp, not with the official
+# `mcp` SDK — a separate distribution, and one Agno declares nowhere in its
+# own dependencies. Without it the toolkit imports fine, constructs fine, and
+# raises on the first connect. Found by running it, not by reading it.
+fastmcp = ">=4.0.0,<5.0.0"
+# FastAPI 0.141+, not 0.119. fastmcp 4 (which Agno's MCPTools uses) needs
+# starlette >= 1.0.1, and every FastAPI before 0.141 caps starlette below
+# 0.49 — the two are simply unresolvable together. Nothing about this is
+# visible until the resolver refuses, which is why it is written down here.
+fastapi = ">=0.141.1,<0.142.0"
+uvicorn = {extras = ["standard"], version = "^0.37.0"}
+pydantic = "^2.12.0"
+pydantic-settings = "^2.7.0"
+httpx = "^0.28.1"
+# Model providers, as optional extras so a reader who only wants one is not
+# made to install both. The floors are Agno's own (`agno[anthropic]` and
+# `agno[openai]`), not guesses: Agno 3.0.6 imports symbols from
+# `anthropic.lib.streaming._beta_types` that do not exist before 0.77, and a
+# looser pin here resolves happily and then fails at the first import.
+anthropic = {version = ">=0.77.0,<1.0.0", optional = true}
+openai = {version = ">=1.106.0,<2.0.0", optional = true}
+
+[tool.poetry.extras]
+anthropic = ["anthropic"]
+openai = ["openai"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.4"
+pytest-asyncio = "^0.24.0"
+ruff = "^0.8.4"
+mypy = "^1.14.0"
+asgi-lifespan = "^2.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP", "B", "C4", "SIM"]
+ignore = ["E501", "B008"]
+
+[tool.mypy]
+plugins = ["pydantic.mypy"]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+mypy_path = "src"
+explicit_package_bases = true
+disable_error_code = ["import-untyped", "import-not-found"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+addopts = "-q"

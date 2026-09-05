@@ -1,0 +1,35 @@
+# Runs the attendant on its own. Turbo Notify itself is a hosted service, so
+# there is nothing else to bring up. point your webhook at this container and
+# it answers.
+#
+# Locally you will need a tunnel (cloudflared, ngrok, a devtunnel) so Turbo
+# Notify can reach port 8080 on your machine. Put the tunnel's public URL in the
+# dashboard as your webhook URL, with the path /webhooks/turbo-notify.
+
+services:
+  support-agent:
+    build: .
+    env_file: .env
+    # PORT means the port the app BINDS, and inside the container that is fixed
+    # at 8080: the published mapping and the healthcheck below both name it.
+    # Without this line `PORT=9000` in .env would reach the app through
+    # `env_file`, uvicorn would bind 9000, and the container would publish and
+    # probe 8080 forever. Set HOST_PORT to change the port on YOUR machine.
+    environment:
+      PORT: "8080"
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    restart: unless-stopped
+    healthcheck:
+      # The image has no curl; python is already there and always will be.
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3).status == 200 else 1)",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s

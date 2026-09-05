@@ -27,6 +27,7 @@ def _question(**overrides: Any) -> Question:
         "event_id": "evt_" + "a" * 32,
         "message_id": "msg_" + "a" * 32,
         "number_alias": "main",
+        "content_type": "text",
         "preview": "How do quotas work?",
         "from_name": "Ana",
         "is_group": False,
@@ -60,6 +61,57 @@ class TestBuildPrompt:
     def test_a_group_question_asks_for_brevity(self) -> None:
         prompt = build_prompt(_question(is_group=True))
         assert "group chat" in prompt
+
+    def test_a_transcribed_voice_note_carries_the_whole_transcript(self) -> None:
+        prompt = build_prompt(
+            _question(content_type="audio", preview="Pode confirmar o pedido de ontem?")
+        )
+        assert "Pode confirmar o pedido de ontem?" in prompt
+
+    def test_a_transcribed_voice_note_is_not_told_to_fetch_the_message_again(self) -> None:
+        """The whole point of skipping `get_message` for audio: Turbo Notify
+        already handed this agent the FULL transcript on the webhook itself
+        (ADR 2026-06-29), so instructing the model to fetch it a second time
+        would cost a tool call for nothing new.
+        """
+        prompt = build_prompt(_question(content_type="audio"))
+        assert "get_message" not in prompt
+
+    def test_an_unreadable_message_asks_for_an_apology_and_an_alternative(self) -> None:
+        """The behaviour this whole shape exists for: a customer whose message
+
+        this agent cannot read still gets a reply, not silence.
+        """
+        prompt = build_prompt(_question(content_type="image", preview=None))
+        assert "apolog" in prompt.lower()
+        assert "image" in prompt
+
+    def test_an_unreadable_message_is_not_told_to_fetch_anything(self) -> None:
+        """There is nothing to fetch: `get_message` would return the same
+
+        content type this agent already could not read.
+        """
+        prompt = build_prompt(_question(content_type="image", preview=None))
+        assert "get_message" not in prompt
+
+    def test_an_unreadable_message_still_carries_the_ids_to_reply_with(self) -> None:
+        prompt = build_prompt(
+            _question(content_type="sticker", preview=None, number_alias="support")
+        )
+        assert "msg_" + "a" * 32 in prompt
+        assert "support" in prompt
+        assert "Reply exactly once" in prompt
+
+    def test_an_untranscribed_voice_note_apology_is_specific_not_generic(self) -> None:
+        """This agent knows exactly what happened here — a voice note it could
+
+        not transcribe, not some type it has never heard of — and the apology
+        should say so rather than reusing the generic "message of type X"
+        phrasing that fits every OTHER unreadable content type.
+        """
+        prompt = build_prompt(_question(content_type="audio", preview=None))
+        assert "transcribe" in prompt.lower()
+        assert '"audio"' not in prompt
 
     def test_the_prompt_names_no_tool_the_agent_was_not_given(self) -> None:
         """The allowlist and the prompt have to agree, or the model is sent hunting.

@@ -4,12 +4,15 @@ Two jobs, both boring and both the kind of thing that is wrong in production for
 months if nobody writes them down:
 
 * **verify** the delivery really came from Turbo Notify and is recent;
-* **decide** whether it is something this agent should answer at all.
+* **decide** whether it is a question from a real person at all, and whether
+  this agent has anything to answer it FROM.
 
-The second matters more than it looks. Turbo Notify delivers every event type
+The first matters more than it looks. Turbo Notify delivers every event type
 you subscribe to — deliveries, reads, reactions, group membership changes — and
 an attendant that treats all of them as questions will happily reply to its own
-outbound message and talk to itself.
+outbound message and talk to itself. The second is a different failure: a
+customer whose message this agent genuinely cannot read is still a customer,
+and gets an apology, not a 202 into the void.
 """
 
 from __future__ import annotations
@@ -101,11 +104,28 @@ def verify_signature(
 
 @dataclass(frozen=True)
 class Question:
-    """An inbound message this agent should answer.
+    """An inbound message worth *some* reply — not necessarily one this agent
+    can actually answer.
 
-    ``preview`` is a cut of up to 50 characters, which is all a webhook carries.
-    The agent fetches the full body with ``get_message`` before answering: the
-    preview is enough to decide there IS a question, never enough to answer it.
+    ``preview`` being ``None`` is the whole point of this shape existing: a
+    customer who sends a photo, a location pin, or a voice note Turbo Notify
+    could not transcribe is not a delivery to silently 202 away. They are a
+    person who gets an apology and a nudge toward what DOES work, same as a
+    human attendant would give them — see ``responder.build_prompt``. This
+    example used to fold "cannot answer" into "not worth answering" and
+    dropped both the same way; the two are not the same thing.
+
+    ``content_type`` decides what ``preview`` holds when it is not ``None``:
+
+    * ``"text"`` — ``preview`` is the webhook's own cut of up to 50 characters.
+      The agent still has to fetch the full body with ``get_message`` before
+      answering: the preview is enough to decide there IS a question, never
+      enough to answer it.
+    * ``"audio"`` — ``preview`` is the FULL transcript. Turbo Notify runs
+      Bring-Your-Own Speech-to-Text before the webhook is even dispatched (ADR
+      2026-06-29), so the whole transcribed text already sits on this same
+      delivery, not a cut of it. Calling ``get_message`` here would fetch
+      nothing this agent does not already have.
     """
 
     #: The ENVELOPE's event id (`evt_…`), stable across redeliveries.
@@ -117,7 +137,15 @@ class Question:
     event_id: str
     message_id: str
     number_alias: str
-    preview: str
+    #: The raw wire value (`"text"`, `"image"`, `"sticker"`, …) — never
+    #: enumerated here, deliberately. A new WhatsApp content type Turbo Notify
+    #: starts sending tomorrow still produces an honest apology today; a
+    #: closed set of known types would need a code change first and silently
+    #: drop everything else in the meantime.
+    content_type: str
+    #: `None` means this agent has nothing to answer FROM — not that there is
+    #: nothing to answer TO. See the class docstring.
+    preview: str | None
     from_name: str | None
     is_group: bool
 
@@ -128,7 +156,7 @@ def parse_question(
     answer_group_messages: bool,
     number_alias: str | None = None,
 ) -> Question:
-    """Pull an answerable question out of a webhook body, or raise.
+    """Pull a question worth replying to out of a webhook body, or raise.
 
     Args:
         event: The decoded JSON body. Typed ``object`` rather than ``dict``
@@ -140,9 +168,15 @@ def parse_question(
             number. ``None`` answers on every number reaching this webhook.
 
     Raises:
-        InboundRejectedError: When the event is not an inbound text message this
-            agent should answer. That is the common case, not an error: most
-            deliveries are receipts and status changes.
+        InboundRejectedError: When this is not an inbound message from a real
+            person at all — the wrong event type, an outbound echo, a group
+            this agent was told to leave alone, a number it does not answer
+            on, or a broken contract. That is the common case, not an error:
+            most deliveries are receipts and status changes. A message this
+            agent genuinely cannot READ (a photo, an untranscribed voice note)
+            is NOT one of these cases: it still comes back as a `Question`,
+            with `preview=None`, so it gets an apology instead of a 202 into
+            the void.
     """
     # The body is whatever was posted, not necessarily an object. Without this,
     # `curl -d '[]'` reached `.get()` on a list and left an AttributeError to
@@ -188,16 +222,45 @@ def parse_question(
     # "carries no text" and the attendant answered nobody. The tests passed
     # because their fixtures were written from the same wrong assumption as the
     # code. Fixtures now mirror a real captured payload.
-    # Same reasoning as `direction`: `content_type` is required, so absent
-    # means the delivery is malformed, not that it is text.
-    if data.get("content_type") != "text":
-        # Media, location, a sticker. Answerable in principle, but this example
-        # keeps to text so the interesting part stays visible.
-        raise InboundRejectedError(f"not a text message: {data.get('content_type')!r}")
+    # `content_type` itself is required — same reasoning as `direction` — so an
+    # absent one is a broken contract, not license to treat the delivery as
+    # readable OR as skippable. Everything downstream of that check, though, is
+    # a real customer message this agent WILL reply to. What differs is only
+    # whether it has words to answer from: `preview` carries them when it does,
+    # and is `None` when it does not, so the model can apologize and offer an
+    # alternative instead of this endpoint going silent on a real person.
+    content_type = data.get("content_type")
+    if not isinstance(content_type, str) or not content_type:
+        raise InboundRejectedError(f"content_type missing or invalid: {content_type!r}", malformed=True)
 
-    preview = data.get("preview")
-    if not isinstance(preview, str) or not preview.strip():
-        raise InboundRejectedError("message carries no text", malformed=True)
+    preview: str | None
+    if content_type == "text":
+        raw_preview = data.get("preview")
+        if not isinstance(raw_preview, str) or not raw_preview.strip():
+            raise InboundRejectedError("message carries no text", malformed=True)
+        preview = raw_preview.strip()
+    elif content_type == "audio":
+        # A voice note. `transcription` is a discriminated object, never a bare
+        # string — {"kind": "available", "text": ..., "language": ...} when
+        # Bring-Your-Own Speech-to-Text produced a result, {"kind":
+        # "unavailable", "reason": ...} when it is not configured for this
+        # organization or the provider failed. The second shape is the common
+        # case, not an error: Turbo Notify's own fail-open invariant (ADR
+        # 2026-06-29) already promises the message itself was never blocked by
+        # a transcription failure, and this agent answers it the same way it
+        # answers a photo it cannot read — an apology, not silence.
+        transcription = data.get("transcription")
+        preview = None
+        if isinstance(transcription, dict) and transcription.get("kind") == "available":
+            text = transcription.get("text")
+            if isinstance(text, str) and text.strip():
+                preview = text.strip()
+    else:
+        # Media, location, a sticker, a calendar invite — anything this
+        # example does not turn into words. Still a real question from a real
+        # person; see the module and `Question` docstrings for why this no
+        # longer raises.
+        preview = None
 
     message_id = data.get("id")
     if not isinstance(message_id, str) or not message_id:
@@ -238,7 +301,8 @@ def parse_question(
         # the number that received the message, because message ids are scoped
         # to a number.
         number_alias=arrived_on,
-        preview=preview.strip(),
+        content_type=content_type,
+        preview=preview,
         from_name=from_name if isinstance(from_name, str) else None,
         is_group=is_group,
     )

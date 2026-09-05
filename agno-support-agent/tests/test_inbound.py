@@ -161,6 +161,7 @@ class TestParseQuestion:
     def test_an_inbound_text_message_is_a_question(self) -> None:
         question = parse_question(_received(), answer_group_messages=False)
 
+        assert question.content_type == "text"
         assert question.preview == "How do quotas work?"
         assert question.message_id == "msg_" + "a" * 32
         assert question.number_alias == "main"
@@ -219,6 +220,35 @@ class TestParseQuestion:
 
         with pytest.raises(InboundRejectedError, match="no text"):
             parse_question(event, answer_group_messages=False)
+
+    @pytest.mark.parametrize("content_type", [None, "", 123])
+    def test_a_missing_content_type_is_malformed(self, content_type: Any) -> None:
+        """Required, same reasoning as `direction`: absent means the delivery
+
+        is broken, not that this agent should guess what it is.
+        """
+        event = _received()
+        event["data"]["content_type"] = content_type
+
+        with pytest.raises(InboundRejectedError, match="content_type") as exc:
+            parse_question(event, answer_group_messages=False)
+        assert exc.value.malformed is True
+
+    def test_an_unrecognised_content_type_is_still_answerable(self) -> None:
+        """Forward compatibility, not an enumerated list.
+
+        A future WhatsApp content type Turbo Notify has not been taught about
+        yet must not need a code change here just to stop being silently
+        dropped: it already gets an honest apology, same as `image` or
+        `sticker` do today.
+        """
+        event = _received()
+        event["data"]["content_type"] = "poll"
+
+        question = parse_question(event, answer_group_messages=False)
+
+        assert question.content_type == "poll"
+        assert question.preview is None
 
     def test_a_message_without_an_id_is_skipped(self) -> None:
         """There would be nothing to reply to."""
@@ -448,10 +478,75 @@ class TestTheRealWebhookShape:
         """The field the code used to read is genuinely absent from a real one."""
         assert "text" not in self.REAL_DELIVERY["data"]
 
-    def test_a_non_text_message_is_declined_by_content_type(self) -> None:
-        """`content_type` is how a real delivery says what it is."""
+    def test_a_non_text_message_is_still_answered_with_no_preview(self) -> None:
+        """`content_type` is how a real delivery says what it is — and a type
+
+        this agent cannot read is not the same thing as "nothing to answer".
+        It is a real customer message, so it still comes back as a `Question`,
+        with `preview=None` telling `build_prompt` to apologize instead of
+        answer. See the `Question` and module docstrings for why this used to
+        raise and no longer does.
+        """
         event = json.loads(json.dumps(self.REAL_DELIVERY))
         event["data"]["content_type"] = "image"
 
-        with pytest.raises(InboundRejectedError, match="not a text message"):
-            parse_question(event, answer_group_messages=False)
+        question = parse_question(event, answer_group_messages=False)
+
+        assert question.content_type == "image"
+        assert question.preview is None
+        assert question.message_id == "msg_" + "c" * 32  # still enough to reply
+
+    def test_a_transcribed_voice_note_is_answerable(self) -> None:
+        """`transcription` is a discriminated object, never a bare string.
+
+        Turbo Notify runs Bring-Your-Own Speech-to-Text before the webhook is
+        even dispatched (ADR 2026-06-29), so a transcribed voice note carries
+        the FULL text on this same delivery — not a 50-character cut like a
+        text message's `preview`.
+        """
+        event = json.loads(json.dumps(self.REAL_DELIVERY))
+        event["data"]["content_type"] = "audio"
+        event["data"]["transcription"] = {
+            "kind": "available",
+            "text": "Oi, pode confirmar o pedido de ontem?",
+            "language": "pt",
+        }
+
+        question = parse_question(event, answer_group_messages=False)
+
+        assert question.content_type == "audio"
+        assert question.preview == "Oi, pode confirmar o pedido de ontem?"
+
+    def test_an_untranscribed_voice_note_still_gets_an_apology(self) -> None:
+        """Not configured, or the provider failed. Turbo Notify's fail-open
+        invariant (ADR 2026-06-29) already promises the message itself was
+        never blocked by this. Only what THIS agent can do with it is: it
+        cannot answer words it does not have, so — same as any other
+        unreadable content type — it apologizes rather than staying silent.
+        """
+        event = json.loads(json.dumps(self.REAL_DELIVERY))
+        event["data"]["content_type"] = "audio"
+        event["data"]["transcription"] = {
+            "kind": "unavailable",
+            "reason": "not_configured",
+        }
+
+        question = parse_question(event, answer_group_messages=False)
+
+        assert question.content_type == "audio"
+        assert question.preview is None
+
+    def test_an_audio_message_with_no_transcription_field_still_gets_an_apology(
+        self,
+    ) -> None:
+        """`transcription` is absent on the wire for a non-audio message, and
+        could in principle also be absent here if a test payload simply
+        forgot it. Either way this agent has no words to answer from, which is
+        an apology, not a crash and not silence.
+        """
+        event = json.loads(json.dumps(self.REAL_DELIVERY))
+        event["data"]["content_type"] = "audio"
+
+        question = parse_question(event, answer_group_messages=False)
+
+        assert question.preview is None

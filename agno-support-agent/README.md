@@ -168,7 +168,7 @@ attack.
 with arguments of their choosing, what would they get? For a read tool the answer is "whatever it
 returns, read aloud to them".
 
-### Four failure modes this guards against
+### Five failure modes this guards against
 
 **Answering your own messages.** That one URL receives every event type, including
 `message.sent` and the outbound half of `message.replied`. An attendant that treats them all as questions replies to itself, forever, and pays
@@ -180,13 +180,26 @@ loses the event outright. So the endpoint verifies, parses, acknowledges, and
 answers in the background. A production deployment would put a real queue there: the comment in
 `webhook.py` says where.
 
-**Answering a preview instead of the question.** A delivery carries only the first ~50 characters.
-`responder.py` tells the model to call `get_message` first and answer the whole thing. Reading the
-preview and replying to that would produce confident answers to half-read questions.
+**Answering a preview instead of the question.** A text delivery carries only the first ~50
+characters. `responder.py` tells the model to call `get_message` first and answer the whole thing.
+Reading the preview and replying to that would produce confident answers to half-read questions. A
+transcribed voice note is the one exception, and it is not a special case of this rule so much as
+its mirror image: Turbo Notify runs Bring-Your-Own Speech-to-Text before the webhook is even
+dispatched, so the FULL transcript already sits on that same delivery, and `responder.py` skips the
+`get_message` call rather than spending one to fetch text it already has.
 
 **Answering on a number you meant to leave alone.** One webhook endpoint receives events for every
 number in the organization. `TURBO_NOTIFY_NUMBER_ALIAS` names the one this attendant answers on,
 and a message that arrived on any other number is left for whoever handles that line.
+
+**Going silent on a message it cannot read.** A photo, a location pin, a voice note Turbo Notify
+could not transcribe: `inbound.py` used to fold all of these into "not answerable" and drop them the
+same way it drops a delivery receipt, a 202 with nothing above debug in the log. The distinction that
+was missing is the one a human attendant would never miss: those are receipts and status changes,
+this is a real person who sent something. `parse_question` now returns a `Question` either way, with
+`preview=None` for whatever it cannot turn into words, and `build_prompt` asks the model to apologize
+and suggest resending as text (or as a voice note, for anything other than a failed voice note) rather
+than staying quiet.
 
 ---
 

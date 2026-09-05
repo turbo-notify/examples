@@ -77,20 +77,61 @@ def build_prompt(question: Question) -> str:
 
     Everything else here is context that changes the answer: who is asking, and
     whether this is a group, where a wall of text is worse than in a one-to-one
-    chat.
+    chat. `question.preview` being `None` changes something more basic: there
+    is nothing here to answer FROM, so the model is asked to apologize and
+    offer an alternative instead of answering a question it was never handed
+    — see `Question`'s docstring for why that is a reply, not a skip.
     """
-    lines = [
-        "A customer sent a message on WhatsApp. This is the first 50 characters"
-        " of it, which is all the notification carries:",
-        f'  "{question.preview}"',
-        "",
-        "First call `get_message` to read the whole thing:",
-        f"  message_id: {question.message_id}",
-        f"  number_alias: {question.number_alias}",
-        "",
-        "Then answer with `reply_to_message`, using the same id and alias.",
-        "Reply exactly once. Do not send any other message.",
-    ]
+    if question.preview is None:
+        if question.content_type == "audio":
+            what_happened = (
+                "A customer sent a voice note on WhatsApp, but Turbo Notify could"
+                " not transcribe it."
+            )
+            alternative = "ask them to send it as text instead"
+        else:
+            what_happened = (
+                f'A customer sent a WhatsApp message of type "{question.content_type}",'
+                " which this assistant cannot read."
+            )
+            alternative = "ask them to send it as text, or as a voice note, instead"
+        lines = [
+            f"{what_happened} Apologize briefly, in the customer's own language, and"
+            f" {alternative}.",
+            "",
+            "Answer with `reply_to_message`:",
+            f"  message_id: {question.message_id}",
+            f"  number_alias: {question.number_alias}",
+        ]
+    elif question.content_type == "text":
+        lines = [
+            "A customer sent a message on WhatsApp. This is the first 50 characters"
+            " of it, which is all the notification carries:",
+            f'  "{question.preview}"',
+            "",
+            "First call `get_message` to read the whole thing:",
+            f"  message_id: {question.message_id}",
+            f"  number_alias: {question.number_alias}",
+            "",
+            "Then answer with `reply_to_message`, using the same id and alias.",
+        ]
+    elif question.content_type == "audio":
+        lines = [
+            "A customer sent a voice note on WhatsApp. Turbo Notify already"
+            " transcribed it in full, so this is everything they said, not a"
+            " preview:",
+            f'  "{question.preview}"',
+            "",
+            "Answer with `reply_to_message`:",
+            f"  message_id: {question.message_id}",
+            f"  number_alias: {question.number_alias}",
+        ]
+    else:
+        raise AssertionError(
+            f"unhandled content_type {question.content_type!r} with a preview"
+        )
+
+    lines.append("Reply exactly once. Do not send any other message.")
     if question.from_name:
         lines.insert(1, f"Their name is {question.from_name}.")
     if question.is_group:

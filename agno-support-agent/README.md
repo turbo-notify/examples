@@ -4,8 +4,12 @@ A WhatsApp support attendant that answers questions about Turbo Notify. It recei
 webhook, decides with an LLM, and replies **through the Turbo Notify MCP server**, the same tools
 any agent gets, chosen by the model rather than hard-coded here.
 
-About 1,100 lines, a good third of them comments explaining why. Read it in ten minutes, then change the knowledge
-file and the instructions and it is answering questions about *your* product instead.
+About 1,400 lines of source across six small modules, and roughly as many again in tests (the
+suite is deliberately as thorough as the code it covers). A good third of the source is comments
+explaining why, not what.
+
+Read it in ten minutes, then change the knowledge file and the instructions and it is answering
+questions about *your* product instead.
 
 ```
 WhatsApp ──▶ Turbo Notify ──webhook──▶ this app
@@ -24,10 +28,17 @@ WhatsApp ──▶ Turbo Notify ──webhook──▶ this app
 - A **Turbo Notify account** with a connected WhatsApp number, and an API key from the dashboard
   under **API Keys**. If you choose scopes for that key, this attendant needs
   `messages:read` (to read the question) and `messages:send` (to answer it). A key created
-  without choosing any scope has full access and works as it is.
+  with the **Acesso total** (full access) template also works as it is.
+- A **plan that includes webhooks** (SOLO or above). On FREE the dashboard refuses to register
+  the webhook this attendant listens on, and the typing indicator it shows while composing
+  also needs SOLO or above.
 - An **LLM API key**. Anthropic by default; OpenAI and any OpenAI-compatible endpoint (OpenRouter,
   Groq, a local server) also work.
-- **Python 3.11+**, or Docker.
+- **Python 3.11+** and **[Poetry](https://python-poetry.org/docs/#installation)**, or Docker.
+  This project has no path dependency on anything outside itself, so a plain `pip install '.[anthropic]'`
+  in a virtual environment also works if you would rather not install Poetry; every command below
+  that starts with `poetry run` then becomes the bare command instead (`python -m support_agent`,
+  `pytest`, and so on).
 
 You do not need anything for the MCP server itself. Turbo Notify hosts it at
 `https://mcp.turbonotify.com/mcp`, and your API key is what identifies your account on it.
@@ -40,12 +51,17 @@ You do not need anything for the MCP server itself. Turbo Notify hosts it at
 git clone https://github.com/turbo-notify/examples.git
 cd examples/agno-support-agent
 
-cp .env.example .env      # fill in TURBO_NOTIFY_API_KEY and your model key
+cp .env.example .env      # fill in TURBO_NOTIFY_API_KEY, TURBO_NOTIFY_WEBHOOK_SECRET, and your model key
 poetry install --extras anthropic
 poetry run python -m support_agent
 ```
 
 It listens on `http://localhost:8080`, and the webhook endpoint is `/webhooks/turbo-notify`.
+
+The agent refuses to start if `TURBO_NOTIFY_WEBHOOK_SECRET` is empty, unless you also set
+`TURBO_NOTIFY_ALLOW_UNSIGNED=true`. Pick a signing secret now, a long random string of your own
+choosing, and put it in `.env` before the first run: it is what makes signature verification below
+work at all.
 
 Turbo Notify has to be able to reach that, so on a laptop you need a tunnel:
 
@@ -55,10 +71,11 @@ cloudflared tunnel --url http://localhost:8080
 ```
 
 Then, in the Turbo Notify dashboard under **Webhooks**, register
-`https://<your-tunnel>/webhooks/turbo-notify`. The signing secret is yours to choose, not
-something the dashboard hands you: put the same long random string in its **Secret de
-Assinatura** field and in `TURBO_NOTIFY_WEBHOOK_SECRET`. A webhook registered from the dashboard receives every event
-type, and this app picks out the one it acts on, `message.received`, itself in `inbound.py`.
+`https://<your-tunnel>/webhooks/turbo-notify`. Put the same signing secret you chose above in its
+**Secret de Assinatura** field: it has to be byte-identical to `TURBO_NOTIFY_WEBHOOK_SECRET`, or
+every delivery is rejected with `401`. A webhook registered from the dashboard receives every event
+type, and this app picks out the ones it acts on, `message.received` and `message.replied`, itself
+in `inbound.py`.
 
 Message your connected number. It answers.
 
@@ -74,15 +91,88 @@ somewhere else (`HOST_PORT=9000 docker compose up`). `PORT` in `.env` is deliber
 inside the container, which always binds 8080: the published mapping and the healthcheck both name
 that port, so letting `.env` move it would leave the container probing a port nothing listens on.
 
+The image installs only the model provider SDK it needs, as a Poetry extra, controlled by the
+`MODEL_EXTRA` build argument (default `anthropic`). To build for OpenAI instead:
+
+```bash
+MODEL_EXTRA=openai docker compose build
+docker compose up
+```
+
+Set `MODEL_PROVIDER` in `.env` to match (`anthropic` or `openai`): the build argument controls
+which SDK is *installed*, and `MODEL_PROVIDER` controls which one the running agent *uses*. The
+two have to agree, or the container starts with a provider SDK it never imports and is missing
+the one it needs.
+
+---
+
+## Verify it works
+
+1. **Health check**, once the process is up:
+
+   ```bash
+   curl -i http://localhost:8080/health
+   ```
+
+   Expect `200` and `{"status":"ok"}`.
+
+2. **Startup log.** With a signing secret configured, the process logs nothing about signatures at
+   all; that silence is the expected state. Without one (and with
+   `TURBO_NOTIFY_ALLOW_UNSIGNED=true`), expect a `WARNING` line naming
+   `TURBO_NOTIFY_WEBHOOK_SECRET` on every start, not only the first.
+
+3. **A real delivery.** Register the webhook (see above), message your connected number, and watch
+   the log. A working turn produces two lines for that message: uvicorn's access line for
+   `POST /webhooks/turbo-notify` (`202`), then, once the model finishes, either
+
+   ```
+   INFO ... Answered msg_... on main
+   ```
+
+   or, when the model failed to reply for any reason,
+
+   ```
+   ERROR ... Did not answer msg_... on main: <reason>
+   ```
+
+   A message never producing either line is the sign something upstream of this app never reached
+   it at all: check the tunnel and the webhook registration before touching the code.
+
+---
+
+## Troubleshooting
+
+**Every delivery gets a `401`.** The signing secret in `.env` and the one in the dashboard's
+**Secret de Assinatura** field have to be byte-identical, including no trailing space either side.
+Send a test delivery from the Webhook Inspector (<https://webhook.turbonotify.com>) to confirm the
+secret before suspecting the code.
+
+**The process exits immediately with "TURBO_NOTIFY_API_KEY is required".** `.env` was not copied
+from `.env.example`, or the key was left blank. Create one in the dashboard under **API Keys**.
+
+**The process refuses to start with "Refusing to start unsigned".** `TURBO_NOTIFY_WEBHOOK_SECRET`
+is empty. Set it, or, only for local testing behind a private tunnel, set
+`TURBO_NOTIFY_ALLOW_UNSIGNED=true` as well.
+
+**Messages never arrive at the endpoint.** The tunnel URL changes every time `cloudflared`/`ngrok`
+restarts unless you have a reserved one; the dashboard's webhook registration has to be updated to
+match the current URL. Confirm the tunnel is up with `curl https://<your-tunnel>/health` from
+another machine before checking anything else.
+
+**The model errors out on the first real question.** Usually a missing or invalid `MODEL_API_KEY`
+(or the provider's own conventional variable, `ANTHROPIC_API_KEY`/`OPENAI_API_KEY`), or a
+`MODEL_ID` the configured provider does not serve.
+
 ---
 
 ## How it works
 
-Five small modules, each with one job.
+Six small modules, each with one job.
 
 | File | Job |
 |---|---|
-| `inbound.py` | Verify the delivery is genuinely from Turbo Notify, then decide whether it is a question worth answering. |
+| `config.py` | Read every setting once from the environment. |
+| `inbound.py` | Verify the delivery is genuinely from Turbo Notify, sanitize customer-controlled text, then decide whether it is a question worth answering. |
 | `agent.py` | Build the Agno agent and connect it to the MCP server. |
 | `knowledge.py` | Load the reference material the agent answers from. |
 | `responder.py` | Compose the turn the model sees, and run it. |
@@ -98,11 +188,11 @@ MCPTools(
 )
 ```
 
-That is the whole integration. The server offers 31 tools (`send_text`, `reply_to_message`,
-`get_number`, `get_message_quota`, `list_contacts` and the rest) and the model picks between
-whichever ones you hand it. This attendant is handed two, and the reasoning is the most
-transferable thing here: see "Give it the tools it needs, and no others" below. A third tool,
-`send_typing_indicator`, is called directly by code rather than handed to the model at all — see
+That is the whole integration. The server offers 32 tools (`send_text`, `reply_to_message`,
+`mark_as_read`, `get_number`, `get_message_quota`, `list_contacts` and the rest) and the model
+picks between whichever ones you hand it. This attendant is handed two, and the reasoning is the
+most transferable thing here: see "Give it the tools it needs, and no others" below. A third tool,
+`send_typing_indicator`, is called directly by code rather than handed to the model at all: see
 "The third MCP call" further down.
 
 The hosted server reads your key **on every request**, so that header is the identity of every
@@ -121,8 +211,8 @@ customer being answered**, and neither way of failing raises. A run that ends in
 back as an ordinary result with an error status on it, and a model that answers in plain text
 instead of calling the tool comes back looking like a complete success. So `read_outcome` checks
 both before anything is logged, and `webhook.py` logs `Did not answer <id> on <alias>: <reason>` at
-error level when the reply did not happen. Without it this example printed "Answered" through an
-entire outage.
+error level when the reply did not happen. Skip that check and log "Answered" as soon as the run
+finishes, and the log reads clean straight through an outage where nobody was actually answered.
 
 ### Two decisions worth copying
 
@@ -177,21 +267,21 @@ sends: `reply_to_message` alone already shows "typing…" for a moment and marks
 message read before delivering, with no call and no argument of yours. That is enough on its own,
 and needs nothing from this example.
 
-What it does not cover is the gap BEFORE that: an LLM turn can take anywhere from one second to
-several tens of seconds — this attendant has seen 24s waits from provider rate limits alone — and
-for that whole stretch the customer sees nothing happening. `send_typing_indicator` closes exactly
-that gap, and `AgnoAttendant.show_typing` (`agent.py`) calls it the moment a question comes in,
-before the model has produced a word.
+What it does not cover is the gap before that: an LLM turn can take anywhere from one second to
+several tens of seconds, easily long enough for a provider rate limit to add its own delay on top,
+and for that whole stretch the customer sees nothing happening. `send_typing_indicator` closes
+exactly that gap, and `AgnoAttendant.show_typing` (`agent.py`) calls it the moment a question comes
+in, before the model has produced a word.
 
 It is not in `ALLOWED_TOOLS`, and could not safely be: it takes an arbitrary recipient, the exact
 shape "Give it the tools it needs, and no others" keeps off the model above. `show_typing` calls it
 through the MCP session directly (`MCPTools.get_session_for_run().call_tool(...)`), bypassing the
 model's own tool-calling loop entirely, with a recipient this code computed from the verified
-webhook sender — the group id for a group question, the sender's own number otherwise — never one a
+webhook sender (the group id for a group question, the sender's own number otherwise), never one a
 crafted message could redirect. Best-effort: a failure here costs the customer a moment of dead air,
 never the actual answer.
 
-### Five failure modes this guards against
+### Seven failure modes this guards against
 
 **Answering your own messages.** That one URL receives every event type, including
 `message.sent` and the outbound half of `message.replied`. An attendant that treats them all as questions replies to itself, forever, and pays
@@ -216,13 +306,25 @@ number in the organization. `TURBO_NOTIFY_NUMBER_ALIAS` names the one this atten
 and a message that arrived on any other number is left for whoever handles that line.
 
 **Going silent on a message it cannot read.** A photo, a location pin, a voice note Turbo Notify
-could not transcribe: `inbound.py` used to fold all of these into "not answerable" and drop them the
-same way it drops a delivery receipt, a 202 with nothing above debug in the log. The distinction that
-was missing is the one a human attendant would never miss: those are receipts and status changes,
-this is a real person who sent something. `parse_question` now returns a `Question` either way, with
-`preview=None` for whatever it cannot turn into words, and `build_prompt` asks the model to apologize
-and suggest resending as text (or as a voice note, for anything other than a failed voice note) rather
-than staying quiet.
+could not transcribe are still real people who sent something, not the receipts and status changes
+that make up most deliveries, and treating the two alike would drop both the same way: a 202 with
+nothing above debug in the log. `parse_question` returns a `Question` either way, with
+`preview=None` for whatever it cannot turn into words, and `build_prompt` asks the model to
+apologize and suggest resending as text (or as a voice note, for anything other than a failed voice
+note) rather than staying quiet. A voice note with no transcript still distinguishes *why*: a
+number with no speech-to-text configured gets a plain "this assistant cannot listen to audio", not
+an apology that implies a transcription attempt that never happened.
+
+**Losing a genuine failure forever.** An event id is only marked answered once `reply_to_message`
+actually delivers. A run that fails (the model errored, the reply tool was refused, a network call
+dropped) releases the id instead of leaving it marked answered, so the retry Turbo Notify already
+sends for a non-2xx delivery still reaches the model, rather than being dropped as an
+already-handled duplicate.
+
+**A crafted display name or message steering the model.** `from_name` and `preview` are both
+written by a stranger. `inbound.py` strips control characters and caps the length of both before
+`Question` ever holds them, and `responder.py` places them inside a `<customer_data>` block the
+instructions describe as data, never as instructions, no matter what the text inside claims.
 
 ---
 
@@ -256,6 +358,19 @@ poetry run pytest
 They run with **no network, no LLM key and no MCP server**: the agent is faked at the one seam
 that exists for it. That is deliberate: a suite that needs three external services up is a suite
 nobody runs, and then the HTTP path is the part nobody tests.
+
+### Quality checks
+
+```bash
+poetry run ruff check .
+poetry run ruff format --check .
+poetry run mypy src
+poetry run pyright --pythonpath "$(poetry run which python)" src tests
+```
+
+`pyright` reads `pyrightconfig.json` for the rest of its settings (which venv to type-check
+against, `src` on the path), so an editor that runs it directly sees the same result as the command
+above.
 
 ---
 

@@ -8,19 +8,19 @@ license = "MIT"
 packages = [{include = "support_agent", from = "src"}]
 
 # No path dependencies, deliberately. This example must build from a bare
-# `git clone` on a machine that has never seen the Turbo Notify workspace —
+# `git clone` on a machine with nothing else from Turbo Notify installed:
 # that is the whole point of an example. Everything below is on PyPI.
 [tool.poetry.dependencies]
 python = ">=3.11,<4.0"
 agno = "^3.0.6"
 # Agno's MCPTools builds its connections with fastmcp, not with the official
-# `mcp` SDK — a separate distribution, and one Agno declares nowhere in its
+# `mcp` SDK: a separate distribution, and one Agno declares nowhere in its
 # own dependencies. Without it the toolkit imports fine, constructs fine, and
 # raises on the first connect. Found by running it, not by reading it.
 fastmcp = ">=4.0.0,<5.0.0"
 # FastAPI 0.141+, not 0.119. fastmcp 4 (which Agno's MCPTools uses) needs
 # starlette >= 1.0.1, and every FastAPI before 0.141 caps starlette below
-# 0.49 — the two are simply unresolvable together. Nothing about this is
+# 0.49, so the two are simply unresolvable together. Nothing about this is
 # visible until the resolver refuses, which is why it is written down here.
 fastapi = ">=0.141.1,<0.142.0"
 uvicorn = {extras = ["standard"], version = "^0.37.0"}
@@ -45,6 +45,7 @@ pytest-asyncio = "^0.24.0"
 ruff = "^0.8.4"
 mypy = "^1.14.0"
 asgi-lifespan = "^2.1.0"
+pyright = "^1.1.414"
 
 [build-system]
 requires = ["poetry-core"]

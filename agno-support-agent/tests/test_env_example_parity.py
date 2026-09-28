@@ -15,8 +15,8 @@ Both directions bite, differently:
   rationale was copied from a sibling module that does not set it; verified
   empirically rather than reasoned from the library's defaults.)
 * A field with no key is a setting nobody discovers. For this example that
-  currently includes the one that decides which number the attendant answers on
-  — a default that silently answers everywhere would be a surprise, not a
+  includes the one that decides which number the attendant answers on: a
+  default that silently answers everywhere would be a surprise, not a
   convenience.
 """
 
@@ -50,13 +50,13 @@ def test_every_documented_key_is_a_real_setting() -> None:
     undeclared = sorted(_example_keys() - set(Settings.model_fields))
     assert not undeclared, (
         "these keys are in .env.example and on no Settings field, so copying "
-        f"the example to .env — which the README tells you to do — fails to "
+        "the example to .env, which the README tells you to do, fails to "
         f"start: {undeclared}"
     )
 
 
 def test_every_setting_is_documented() -> None:
     undocumented = sorted(set(Settings.model_fields) - _example_keys())
-    assert not undocumented, (
-        f"these settings exist and appear nowhere in .env.example: {undocumented}"
-    )
+    assert (
+        not undocumented
+    ), f"these settings exist and appear nowhere in .env.example: {undocumented}"

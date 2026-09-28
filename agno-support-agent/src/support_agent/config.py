@@ -63,12 +63,20 @@ class Settings(BaseSettings):
 
     #: The signing secret you set beside the webhook URL in the dashboard.
     #:
-    #: Empty disables verification, which is acceptable while you are pointing
-    #: the webhook at a tunnel on your laptop and nothing else can reach it. It
-    #: is not acceptable anywhere a stranger can POST: without it, anyone who
-    #: learns your URL can make the agent answer whatever they like, on your
+    #: Empty refuses to start unless `turbo_notify_allow_unsigned` is also
+    #: set. Anywhere a stranger can reach this URL, an unsigned webhook lets
+    #: anyone who learns it make the agent answer whatever they like, on your
     #: number and at your expense.
     turbo_notify_webhook_secret: str = ""
+
+    #: Starts the agent anyway with `turbo_notify_webhook_secret` empty.
+    #:
+    #: For local testing behind a private tunnel only, where nothing else can
+    #: reach the URL. Leaving the secret empty on a publicly reachable
+    #: endpoint is not a configuration choice this example makes easy by
+    #: accident: it refuses to start unless this is also set, and the startup
+    #: log says so loudly every time it runs unsigned.
+    turbo_notify_allow_unsigned: bool = False
 
     #: Reject deliveries whose timestamp is older than this. Turbo Notify signs
     #: the timestamp along with the body, so a replayed delivery keeps a valid

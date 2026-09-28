@@ -6,7 +6,7 @@ Two properties this endpoint has to hold, and they pull in opposite directions:
   promptly, and an LLM turn plus a couple of tool calls takes seconds. Doing the
   work inline means the same question gets answered twice, or three times.
 * **Never lose one.** Answering 202 and then dropping the work is worse than
-  being slow — the customer waits for a reply that is never coming.
+  being slow: the customer waits for a reply that is never coming.
 
 So: verify and parse synchronously (fast, and the only part that can legitimately
 reject), then hand the answer to a background task and acknowledge. If the
@@ -21,7 +21,7 @@ import logging
 from collections import OrderedDict
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import BackgroundTasks, FastAPI, Header, Request, Response, status
 
@@ -36,7 +36,37 @@ from support_agent.responder import Attendant, answer
 #: in whatever store its queue already uses.
 SEEN_EVENT_CAPACITY = 4096
 
+#: How much of a tool's own result text ever reaches a log line. The text can
+#: carry MCP-server error detail, and in principle anything reflected back
+#: from customer-controlled input; a log line is not the place to reproduce
+#: that in full.
+MAX_LOGGED_DETAIL_LENGTH = 300
+
+#: An event id's place in the in-memory dedupe map. `"in_flight"` is cleared
+#: on both success and failure, so a delivery that failed to get an answer
+#: can be retried; only `"answered"` is permanent, because only a successful
+#: reply must never happen twice.
+EventState = Literal["in_flight", "answered"]
+
 logger = logging.getLogger("support_agent.webhook")
+
+
+class UnsignedWebhookNotAllowedError(RuntimeError):
+    """Raised at startup when the webhook has no secret and no explicit opt-in.
+
+    Starting unsigned by accident is the failure this guards against, not
+    starting unsigned at all: set `TURBO_NOTIFY_ALLOW_UNSIGNED=true` to do it
+    on purpose, for local testing behind a private tunnel only.
+    """
+
+
+def _truncated_for_log(text: str | None) -> str | None:
+    """Cap a piece of tool-result or error text before it reaches a log line."""
+    if text is None:
+        return None
+    if len(text) <= MAX_LOGGED_DETAIL_LENGTH:
+        return text
+    return text[:MAX_LOGGED_DETAIL_LENGTH] + "…(truncated)"
 
 
 def create_app(
@@ -49,19 +79,37 @@ def create_app(
         settings: Overridden in tests.
         attendant_factory: An async context manager yielding an
             :class:`Attendant`. Injected so the tests can run the whole HTTP
-            path with no model, no MCP server and no API key — the alternative
+            path with no model, no MCP server and no API key. The alternative
             is a suite that only runs when three external things are up, which
             in practice means a suite nobody runs.
     """
     resolved = settings or get_settings()
     factory = attendant_factory or _default_attendant_factory
 
+    if not resolved.verifies_signatures and not resolved.turbo_notify_allow_unsigned:
+        raise UnsignedWebhookNotAllowedError(
+            "TURBO_NOTIFY_WEBHOOK_SECRET is empty. Refusing to start unsigned: anyone "
+            "who learns this URL could make the agent answer whatever they like, on "
+            "your number and at your expense. This is fine behind a tunnel on your "
+            "laptop and nowhere else: set TURBO_NOTIFY_ALLOW_UNSIGNED=true to start "
+            "anyway, for local testing only."
+        )
+
     # Turbo Notify retries a delivery that does not get a prompt 2xx, and the
     # envelope `id` is stable across those attempts while the timestamp is NOT:
     # a fresh one is stamped per attempt, so the replay window can never reject
     # a redelivery. Without this, every retry costs another real WhatsApp
     # message, another message-quota unit and another model turn.
-    seen: OrderedDict[str, None] = OrderedDict()
+    #
+    # Marking an id "in_flight" as soon as it is accepted, rather than waiting
+    # for the answer, is what stops two near-simultaneous deliveries of the
+    # SAME id from both reaching the model: there is no `await` between the
+    # membership check below and the write that follows it, so the two can
+    # never interleave. Only a successful reply moves an id to "answered",
+    # which is the state a redelivery must never cross again. A FAILED
+    # attempt clears the entry instead of leaving it "in_flight" forever, so a
+    # retried delivery after a real failure still gets answered.
+    seen: OrderedDict[str, EventState] = OrderedDict()
 
     @asynccontextmanager
     async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
@@ -136,22 +184,23 @@ def create_app(
                 logger.debug("Nothing to answer: %s", exc)
             return Response(status_code=status.HTTP_202_ACCEPTED)
 
-        if question.event_id in seen:
-            logger.info(
-                "Ignoring a redelivery of %s (already answered)", question.event_id
-            )
+        state = seen.get(question.event_id)
+        if state is not None:
+            logger.info("Ignoring a redelivery of %s (%s)", question.event_id, state)
             return Response(status_code=status.HTTP_202_ACCEPTED)
-        seen[question.event_id] = None
+        seen[question.event_id] = "in_flight"
         while len(seen) > SEEN_EVENT_CAPACITY:
             seen.popitem(last=False)
 
-        background.add_task(_answer_safely, question, app.state.attendant)
+        background.add_task(_answer_safely, question, app.state.attendant, seen)
         return Response(status_code=status.HTTP_202_ACCEPTED)
 
     return app
 
 
-async def _answer_safely(question: Any, attendant: Attendant) -> None:
+async def _answer_safely(
+    question: Any, attendant: Attendant, seen: OrderedDict[str, EventState]
+) -> None:
     """Answer, and never let a failure escape into the server's task group.
 
     An exception from a background task is not returned to anyone: the customer
@@ -162,6 +211,12 @@ async def _answer_safely(question: Any, attendant: Attendant) -> None:
     404, or a model that answers in plain text instead of calling the reply
     tool, both come back as an ordinary result. So the log reports what
     :func:`answer` observed, not merely that it returned.
+
+    ``seen`` is only ever moved forward here: to `"answered"` on a real
+    reply, or removed entirely on anything else, so a redelivery after a
+    genuine failure is not permanently ignored. A customer whose first
+    attempt failed still gets a second one, on the retry Turbo Notify already
+    sends.
     """
     try:
         await attendant.show_typing(question)
@@ -174,16 +229,19 @@ async def _answer_safely(question: Any, attendant: Attendant) -> None:
         outcome = await answer(question, attendant)
     except Exception:
         logger.exception("Failed to answer %s on %s", question.message_id, question.number_alias)
+        seen.pop(question.event_id, None)
         return
 
     if outcome.replied:
+        seen[question.event_id] = "answered"
         logger.info("Answered %s on %s", question.message_id, question.number_alias)
     else:
+        seen.pop(question.event_id, None)
         logger.error(
             "Did not answer %s on %s: %s",
             question.message_id,
             question.number_alias,
-            outcome.detail,
+            _truncated_for_log(outcome.detail),
         )
 
 
@@ -213,4 +271,4 @@ def _warn_if_unverified(settings: Settings) -> None:
     )
 
 
-__all__ = ["create_app"]
+__all__ = ["UnsignedWebhookNotAllowedError", "create_app"]

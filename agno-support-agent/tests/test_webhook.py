@@ -1,7 +1,7 @@
 """The receiver, exercised end to end with no model and no MCP server.
 
 The attendant is faked at the one seam that exists for it. That is what lets
-this suite run on every change, on a laptop with no keys — a suite that needs
+this suite run on every change, on a laptop with no keys. A suite that needs
 three external services up is a suite nobody runs, and then the HTTP path is
 the part nobody tests.
 """
@@ -9,6 +9,7 @@ the part nobody tests.
 from __future__ import annotations
 
 import ast
+import asyncio
 import hashlib
 import hmac
 import json
@@ -22,11 +23,14 @@ from typing import Any
 import httpx
 import pytest
 from agno.models.response import ToolExecution
-from agno.run.agent import RunOutput, RunStatus
+from agno.run.agent import RunOutput
+from agno.run.base import RunStatus
 from asgi_lifespan import LifespanManager
 
 from support_agent.config import Settings
-from support_agent.webhook import create_app
+from support_agent.webhook import UnsignedWebhookNotAllowedError, create_app
+
+from .fixtures.settings import settings_ignoring_dotenv
 
 SECRET = "whsec_example"
 ENDPOINT = "/webhooks/turbo-notify"
@@ -91,6 +95,45 @@ class FakeAttendant:
         self.typing_calls.append(question)
 
 
+class _FlakyThenWorkingAttendant(FakeAttendant):
+    """Fails the first turn, answers normally on every one after.
+
+    Models a real retry: the delivery's first attempt genuinely fails (the
+    model is unreachable, a tool call raises), and Turbo Notify redelivers
+    the same event id. That redelivery must still reach the model, not be
+    dropped as an already-answered duplicate.
+    """
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls = 0
+
+    async def arun(self, input: str) -> object:  # noqa: A002 - the library's name
+        self.calls += 1
+        if self.calls == 1:
+            raise RuntimeError("the model is down, just this once")
+        self.prompts.append(input)
+        return fake_run()
+
+
+class _GatedAttendant(FakeAttendant):
+    """Blocks inside `arun` until a test releases it.
+
+    Lets a test hold one delivery "in flight" for as long as it needs to, so
+    a concurrent redelivery of the same event id can be sent while the first
+    is still being answered.
+    """
+
+    def __init__(self, gate: asyncio.Event) -> None:
+        super().__init__()
+        self.gate = gate
+
+    async def arun(self, input: str) -> object:  # noqa: A002 - the library's name
+        self.prompts.append(input)
+        await self.gate.wait()
+        return fake_run()
+
+
 def _settings(**overrides: Any) -> Settings:
     base: dict[str, Any] = {
         "turbo_notify_api_key": "tn_test",
@@ -98,13 +141,13 @@ def _settings(**overrides: Any) -> Settings:
         "answer_group_messages": False,
     }
     base.update(overrides)
-    # `_env_file=None` or the suite silently inherits the developer's own .env
-    # for every field these three do not pin. Verified: `turbo_notify_mcp_url`
-    # was resolving to a local server rather than the default, and
-    # `turbo_notify_number_alias` was unpinned while the fixtures hardcode
-    # "main" — so anyone who followed the README and set a different alias got a
-    # red suite with no visible cause.
-    return Settings(_env_file=None, **base)
+    # Ignores the developer's own .env, or the suite silently inherits it for
+    # every field these three do not pin: `turbo_notify_mcp_url` could resolve
+    # to a local server instead of the default, and `turbo_notify_number_alias`
+    # could disagree with the "main" the fixtures hardcode, so a reader who
+    # followed the README and set a different alias would see a red suite with
+    # no visible cause.
+    return settings_ignoring_dotenv(**base)
 
 
 def _factory_for(attendant: FakeAttendant) -> Any:
@@ -140,7 +183,9 @@ def _received_body(**data_overrides: Any) -> bytes:
         "to": {"number": "5511888888888"},
     }
     data.update(data_overrides)
-    return json.dumps({"id": "evt_" + "e" * 32, "type": "message.received", "number_alias": "main", "data": data}).encode()
+    return json.dumps(
+        {"id": "evt_" + "e" * 32, "type": "message.received", "number_alias": "main", "data": data}
+    ).encode()
 
 
 @asynccontextmanager
@@ -312,10 +357,12 @@ class TestDeliveriesWorthIgnoring:
 
 
 class TestUnverifiedMode:
-    async def test_without_a_secret_deliveries_are_accepted(self) -> None:
+    async def test_without_a_secret_deliveries_are_accepted_when_explicitly_allowed(
+        self,
+    ) -> None:
         """Documented as a local-tunnel convenience, and warned about at startup."""
         attendant = FakeAttendant()
-        settings = _settings(turbo_notify_webhook_secret="")
+        settings = _settings(turbo_notify_webhook_secret="", turbo_notify_allow_unsigned=True)
         body = _received_body()
 
         async with _client(attendant, settings) as client:
@@ -330,13 +377,33 @@ class TestUnverifiedMode:
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
         attendant = FakeAttendant()
-        settings = _settings(turbo_notify_webhook_secret="")
+        settings = _settings(turbo_notify_webhook_secret="", turbo_notify_allow_unsigned=True)
 
         with caplog.at_level("WARNING"):
             async with _client(attendant, settings):
                 pass
 
         assert "TURBO_NOTIFY_WEBHOOK_SECRET" in caplog.text
+
+
+class TestUnsignedBootRefusal:
+    """Starting unsigned has to be a choice, not a default nobody noticed."""
+
+    def test_refuses_to_start_without_a_secret_or_an_explicit_opt_in(self) -> None:
+        with pytest.raises(UnsignedWebhookNotAllowedError):
+            create_app(_settings(turbo_notify_webhook_secret=""))
+
+    def test_starts_when_the_opt_in_is_explicit(self) -> None:
+        app = create_app(
+            _settings(turbo_notify_webhook_secret="", turbo_notify_allow_unsigned=True),
+            attendant_factory=_factory_for(FakeAttendant()),
+        )
+        assert app is not None
+
+    def test_starts_normally_with_a_secret_configured(self) -> None:
+        """The opt-in is never required when the agent is signed as documented."""
+        app = create_app(_settings(), attendant_factory=_factory_for(FakeAttendant()))
+        assert app is not None
 
 
 class TestFailureIsolation:
@@ -384,16 +451,34 @@ class TestFailureIsolation:
         assert "Did not answer" in caplog.text
         assert "msg_" + "a" * 32 in caplog.text
 
+    async def test_a_long_tool_result_is_truncated_before_it_reaches_the_log(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """The failure detail can carry MCP-server error text, unbounded.
+
+        A log line is not the place to reproduce an arbitrarily long payload,
+        whatever produced it: this caps it rather than growing the log file
+        without bound on every refusal.
+        """
+        attendant = FakeAttendant(refused="x" * 5000)
+        body = _received_body()
+
+        with caplog.at_level("ERROR"):
+            async with _client(attendant) as client:
+                await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert "truncated" in caplog.text
+        assert "x" * 5000 not in caplog.text
+
     async def test_a_delivery_that_breaks_the_contract_is_said_out_loud(
         self, caplog: pytest.LogCaptureFixture
     ) -> None:
-        """The exact silence that hid the `data["text"]` bug for a whole session.
+        """A malformed delivery must be visible, never silent.
 
-        A malformed delivery is still answered 202, because retrying cannot fix
-        it, so the LOG is the only place it is visible. When every rejection
-        went to `debug`, a contract change produced a 202 for every delivery,
-        an attendant that answered nobody, and not one line at the default
-        level.
+        It is still answered 202, because retrying cannot fix it, so the log
+        is the only place it is visible. Logging every rejection at `debug`
+        would make a contract change produce a 202 for every delivery, an
+        attendant that answers nobody, and not one line at the default level.
         """
         body = _received_body()
         payload = json.loads(body)
@@ -443,10 +528,10 @@ class TestFailureIsolation:
 
         The freshness is the point: `verify_signature`'s replay window can
         never reject a redelivery, because Turbo Notify stamps a new timestamp
-        on every attempt. So each retry used to cost another real WhatsApp
-        message, another message-quota unit and another model turn, in the one
-        implementation this project publishes for people to copy. Signed twice
-        here, exactly as a real retry arrives.
+        on every attempt. Without deduping on the envelope id, each retry
+        would cost another real WhatsApp message, another message-quota unit
+        and another model turn. Signed twice here, exactly as a real retry
+        arrives.
         """
         attendant = FakeAttendant()
         body = _received_body()
@@ -457,9 +542,57 @@ class TestFailureIsolation:
 
         assert first.status_code == 202
         assert second.status_code == 202
-        assert len(attendant.prompts) == 1, (
-            "the redelivery was answered a second time, at the customer's expense"
-        )
+        assert (
+            len(attendant.prompts) == 1
+        ), "the redelivery was answered a second time, at the customer's expense"
+
+    async def test_a_retry_after_a_failed_answer_is_answered(self) -> None:
+        """A failed attempt must release the event id, not lock it forever.
+
+        The first delivery fails genuinely (the model was down for that one
+        turn). Turbo Notify redelivers the same event id, and this second
+        attempt must reach the model: marking an id "answered" only on
+        success, and releasing it on failure, is what makes that possible.
+        """
+        attendant = _FlakyThenWorkingAttendant()
+        body = _received_body()
+
+        async with _client(attendant) as client:
+            first = await client.post(ENDPOINT, content=body, headers=_signed(body))
+            second = await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert first.status_code == 202
+        assert second.status_code == 202
+        assert attendant.calls == 2, "the retry never reached the model"
+        assert len(attendant.prompts) == 1, "only the successful attempt should have answered"
+
+    async def test_a_concurrent_duplicate_is_not_answered_twice(self) -> None:
+        """Two deliveries of the SAME event id, in flight at the same time.
+
+        Unlike the sequential redelivery above, here the second delivery
+        arrives while the first is still being answered, not after it
+        finished. Marking the id "in_flight" before the model is ever called,
+        with no `await` between the membership check and that write, is what
+        keeps the second one from reaching the model too.
+        """
+        gate = asyncio.Event()
+        attendant = _GatedAttendant(gate)
+        body = _received_body()
+
+        async def _release_shortly() -> None:
+            await asyncio.sleep(0.05)
+            gate.set()
+
+        async with _client(attendant) as client:
+            first, second, _ = await asyncio.gather(
+                client.post(ENDPOINT, content=body, headers=_signed(body)),
+                client.post(ENDPOINT, content=body, headers=_signed(body)),
+                _release_shortly(),
+            )
+
+        assert first.status_code == 202
+        assert second.status_code == 202
+        assert len(attendant.prompts) == 1, "a concurrent duplicate reached the model too"
 
     async def test_a_different_delivery_is_still_answered(self) -> None:
         """The other direction, so the guard above cannot pass by answering nobody."""
@@ -519,13 +652,11 @@ class TestFailureIsolation:
             and isinstance(node.value.func, ast.Name)
             and node.value.func.id == "answer"
         ]
-        assert not awaited_inline, (
-            "the receiver awaits `answer` itself, so the 202 waits for a model turn"
-        )
+        assert (
+            not awaited_inline
+        ), "the receiver awaits `answer` itself, so the 202 waits for a model turn"
 
-    async def test_a_routine_skip_stays_quiet(
-        self, caplog: pytest.LogCaptureFixture
-    ) -> None:
+    async def test_a_routine_skip_stays_quiet(self, caplog: pytest.LogCaptureFixture) -> None:
         """The other half. Most deliveries are receipts, and logging each one
         above debug would bury the endpoint in noise, which is how the warning
         above stops being read."""
@@ -542,9 +673,9 @@ class TestFailureIsolation:
             async with _client(FakeAttendant()) as client:
                 await client.post(ENDPOINT, content=body, headers=_signed(body))
 
-        assert not [r for r in caplog.records if r.levelno >= logging.WARNING], (
-            "a routine receipt was logged as a problem"
-        )
+        assert not [
+            r for r in caplog.records if r.levelno >= logging.WARNING
+        ], "a routine receipt was logged as a problem"
 
     async def test_a_real_reply_is_logged_as_answered(
         self, caplog: pytest.LogCaptureFixture

@@ -1,6 +1,6 @@
 """Showing "typing…" by calling the MCP server directly, never through the model.
 
-`send_typing_indicator` takes an arbitrary recipient — the same shape every
+`send_typing_indicator` takes an arbitrary recipient, the same shape every
 other excluded tool has (see `test_agent_tools.py`). What makes it safe to use
 at all is that nothing here ever hands the model a chance to choose that
 recipient: `AgnoAttendant.show_typing` computes it from the verified webhook

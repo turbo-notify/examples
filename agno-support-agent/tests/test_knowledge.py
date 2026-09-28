@@ -22,9 +22,22 @@ def test_it_loads_and_carries_the_substance() -> None:
         assert topic in text, f"reference material never mentions {topic!r}"
 
 
-def test_it_tells_the_model_what_to_do_when_the_material_falls_short() -> None:
-    """Otherwise a gap in the docs becomes a confident wrong answer about billing."""
-    assert "does not cover" in load_knowledge()
+def test_it_covers_the_topics_this_attendant_gets_asked_about() -> None:
+    """These are real questions a customer asks, not incidental substrings.
+
+    Each one failing here means the attendant would answer from nothing and
+    either invent a figure or wrongly claim not to know, on exactly the
+    topics most likely to cost a customer real money if gotten wrong.
+    """
+    text = load_knowledge()
+    for topic in (
+        "mark_as_read",
+        "Transcrição",
+        "not_configured",
+        "retention",
+        "typing indicator",
+    ):
+        assert topic in text, f"reference material never mentions {topic!r}"
 
 
 def test_the_order_is_stable(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:

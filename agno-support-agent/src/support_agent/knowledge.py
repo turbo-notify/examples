@@ -5,14 +5,14 @@ and that is a decision rather than a shortcut.
 
 Turbo Notify's public documentation is a few dozen short pages. Loaded whole it
 costs a fixed amount of context per run and the model sees all of it, every
-time — no retrieval step to tune, no embedding provider to pay, no vector
+time: no retrieval step to tune, no embedding provider to pay, no vector
 database to run, and no class of failure where the right passage simply was not
 retrieved. For a corpus this size that is strictly better.
 
 **When to graduate to retrieval.** Roughly: when the material stops fitting
 comfortably in context, when it changes often enough that a rebuild-and-redeploy
 is too slow, or when answers need customer-specific documents rather than one
-shared set. Agno has `Knowledge` with a vector database for exactly that — swap
+shared set. Agno has `Knowledge` with a vector database for exactly that: swap
 `description=load_knowledge()` in agent.py for `knowledge=...` and keep
 everything else. Doing it before you need it buys nothing and costs a service.
 """

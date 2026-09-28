@@ -1,0 +1,22 @@
+# Secrets: the image is built with build args and `.env`'s runtime values are
+# supplied by `env_file` in docker-compose.yml, never baked into a layer.
+.env
+
+# Caches and virtual environments: never needed inside the image, and
+# `.venv` in particular can be large enough to slow every build.
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.pyc
+
+# Version control and editor metadata.
+.git/
+.gitignore
+.vscode/
+.idea/
+
+# Tests: the Dockerfile never copies them in (only `src/`, `knowledge/` and
+# `README.md`), and excluding them here keeps the build context itself small.
+tests/

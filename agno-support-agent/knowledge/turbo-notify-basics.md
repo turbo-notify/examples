@@ -64,6 +64,20 @@ that changes this, and `mime_type` does not: it only tells the recipient's phone
 how to present the file. If someone asks for a voice message, say it is not
 available rather than suggesting a MIME type.
 
+Voice notes an organization *receives* can be transcribed automatically, but
+only when Bring-Your-Own Speech-to-Text is configured for the number, under
+**Transcrição** in the dashboard. Without it, an inbound voice note still
+arrives (transcription never blocks the message itself), but its transcript
+comes back unavailable with reason `not_configured`; the other four reasons
+(`provider_error`, `timeout`, `no_adapter`, `internal_error`) mean the
+integration was configured but that one attempt failed. The two are different
+situations for a person to hear about: one means "nobody has set this up",
+the other means "this usually works and did not, this time".
+
+The typing indicator (`send_typing_indicator`) needs at least the Lobo
+Solitário plan for any call at all, and, like sending, needs Empresarial or
+above to target a group.
+
 Media is sent by URL, and the URL has to be reachable when the send happens:
 Turbo Notify fetches the bytes from it. A copy is kept in the customer's own
 object storage when that is configured, which is what makes the media readable
@@ -104,6 +118,15 @@ Plans: Gratuito, Lobo Solitário, Empresarial, and a Personalizado tier arranged
 directly. Prices and limits are on the pricing page; do not quote figures from
 memory, because they change.
 
+A message's *content* (its text, caption or media reference) also has a
+retention window that is shorter than its metadata: Gratuito and Lobo Solitário
+keep content for 3 fixed days; Empresarial keeps it 3 days by default with the
+option to extend to 30 or 90; a Personalizado plan has whatever window is in
+its contract. After that window, the content is permanently gone: fetching the
+message by id returns not found, the same shape as a message that never
+existed. The message's metadata (that it existed, its final status, when it
+was sent or received) survives 12 fixed months on every plan regardless.
+
 ## Webhooks and events
 
 Turbo Notify delivers events to a URL the customer registers. Every delivery is
@@ -126,12 +149,18 @@ Yes, Turbo Notify has one. It is how this attendant itself works, so if someone
 asks whether Turbo Notify supports MCP, the answer is yes and the honest extra
 detail is that they are talking to it.
 
-The server exposes the public API as 31 ready-made tools an agent can call:
+The server exposes the public API as 32 ready-made tools an agent can call:
 sending (text, media, location, contact card, calendar event, CTA button),
-acting on a message (reply, edit, delete, react, typing indicator), reading
-messages, contacts and groups, listing and connecting numbers, and checking
-usage and quotas. The agent picks between them; the customer writes no HTTP
-client.
+acting on a message (reply, edit, delete, react, typing indicator, marking as
+read without replying), reading messages, contacts and groups, listing and
+connecting numbers, and checking usage and quotas. The agent picks between
+them; the customer writes no HTTP client.
+
+`mark_as_read` clears an inbound message's unread state without sending a
+reply: useful when a human is taking over a conversation and just needs the
+backlog acknowledged. It needs the same scope as replying (`messages:send`),
+and it is gated by the same plan feature as detailed read receipts (BUSINESS and
+above). The sender sees those messages as read on WhatsApp.
 
 It is hosted by Turbo Notify, over Streamable HTTP at
 `https://mcp.turbonotify.com/mcp`, with the API key in the `Authorization`
@@ -139,7 +168,7 @@ header of every call. One address serves everybody, and the key is what says
 whose account it is, so there is nothing to install and nothing to run: any MCP
 host that accepts a remote server points at that URL.
 
-A key created without choosing scopes reaches all 31 tools. A scoped key needs
+A key created with the **Acesso total** (full access) template reaches all 32 tools. A scoped key needs
 the scope of each family it uses, and two of those surprise people: replying,
 editing, deleting and reacting all count as sending (`messages:send`), and
 refreshing a contact spends a real WhatsApp lookup (`contacts:write`).

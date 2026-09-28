@@ -8,7 +8,15 @@
 
 services:
   support-agent:
-    build: .
+    build:
+      context: .
+      args:
+        # Which model provider SDK gets built into the image; matches the
+        # optional extras in pyproject.toml. Override with
+        # `MODEL_EXTRA=openai docker compose build`. Keep this in sync with
+        # `MODEL_PROVIDER` in `.env`: this argument controls what gets
+        # installed, `MODEL_PROVIDER` controls what the agent uses at runtime.
+        MODEL_EXTRA: ${MODEL_EXTRA:-anthropic}
     env_file: .env
     # PORT means the port the app BINDS, and inside the container that is fixed
     # at 8080: the published mapping and the healthcheck below both name it.

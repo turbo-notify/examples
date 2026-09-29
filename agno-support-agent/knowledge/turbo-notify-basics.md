@@ -163,7 +163,7 @@ and it is gated by the same plan feature as detailed read receipts (BUSINESS and
 above). The sender sees those messages as read on WhatsApp.
 
 It is hosted by Turbo Notify, over Streamable HTTP at
-`https://mcp.turbonotify.com/mcp`, with the API key in the `Authorization`
+`https://mcp.turbonotify.com`, with the API key in the `Authorization`
 header of every call. One address serves everybody, and the key is what says
 whose account it is, so there is nothing to install and nothing to run: any MCP
 host that accepts a remote server points at that URL.

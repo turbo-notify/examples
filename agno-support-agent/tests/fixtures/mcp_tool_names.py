@@ -14,7 +14,7 @@ a running server and call `tools/list` yourself, for example:
     from mcp.client.streamable_http import streamablehttp_client
 
     async with streamablehttp_client(
-        "https://mcp.turbonotify.com/mcp",
+        "https://mcp.turbonotify.com",
         headers={"Authorization": "Bearer <your key>"},
     ) as (read, write, _):
         async with ClientSession(read, write) as session:

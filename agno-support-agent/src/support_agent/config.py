@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # ─── Turbo Notify ────────────────────────────────────────────────────────
     #: The MCP server. Turbo Notify hosts it; there is nothing to run yourself.
-    turbo_notify_mcp_url: str = "https://mcp.turbonotify.com/mcp"
+    turbo_notify_mcp_url: str = "https://mcp.turbonotify.com"
 
     #: Your Turbo Notify API key. Created in the dashboard under API Keys.
     turbo_notify_api_key: str = ""

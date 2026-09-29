@@ -41,7 +41,7 @@ WhatsApp ──▶ Turbo Notify ──webhook──▶ this app
   `pytest`, and so on).
 
 You do not need anything for the MCP server itself. Turbo Notify hosts it at
-`https://mcp.turbonotify.com/mcp`, and your API key is what identifies your account on it.
+`https://mcp.turbonotify.com`, and your API key is what identifies your account on it.
 
 ---
 
@@ -182,7 +182,7 @@ Six small modules, each with one job.
 
 ```python
 MCPTools(
-    url="https://mcp.turbonotify.com/mcp",
+    url="https://mcp.turbonotify.com",
     transport="streamable-http",
     headers={"Authorization": f"Bearer {api_key}"},
 )

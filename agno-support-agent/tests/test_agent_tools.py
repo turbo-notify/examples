@@ -112,9 +112,9 @@ class TestBuildMcpTools:
 
     def test_it_uses_the_configured_url(self) -> None:
         tools = build_mcp_tools(
-            self._settings(turbo_notify_mcp_url="https://mcp.turbonotify.com/mcp")
+            self._settings(turbo_notify_mcp_url="https://mcp.turbonotify.com")
         )
-        assert tools.url == "https://mcp.turbonotify.com/mcp"
+        assert tools.url == "https://mcp.turbonotify.com"
 
     def test_it_uses_streamable_http(self) -> None:
         """Not `stdio`, not `sse`: the hosted server is reached over Streamable HTTP."""

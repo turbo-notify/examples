@@ -17,9 +17,14 @@ customer connects one or more real WhatsApp numbers, then sends and receives
 through a REST API, through webhooks, or through the Model Context Protocol
 server (which is how this attendant itself works).
 
-It is not the WhatsApp Business Cloud API. Numbers are connected as **linked
-devices**, the way WhatsApp Web is, which is why a number is "connected" or
-"disconnected" rather than simply configured.
+It is not the WhatsApp Business Cloud API and is not affiliated with Meta.
+Numbers are connected as **linked devices**, the way WhatsApp Web is, which is
+why a number is "connected" or "disconnected" rather than simply configured.
+Turbo Notify paces every send to lower the risk of WhatsApp banning a number;
+no service can remove that risk, so never promise it.
+
+It is sold three ways: the WhatsApp API, AI agents (the MCP server below) and
+resale (extra numbers a partner resells to its own customers).
 
 ## Numbers
 
@@ -39,10 +44,24 @@ scheduled. Only `connected` can send.
   from the dashboard by a person. An extra number can be re-paired through the
   API, and either way somebody has to act on the phone.
 
-Adding an extra number is charged immediately, before it is provisioned.
-Removing one is refunded if it has sent fewer than 10 messages and it is within
-72 hours of that number FIRST CONNECTING, not of the purchase. A number that was
-never connected is always refundable.
+Adding an extra number is charged immediately, before it is provisioned. A
+number removed right after it was added can be refunded automatically;
+otherwise it stays active until the end of the cycle already paid. Before
+confirming a removal, the dashboard shows which of the two applies to that
+number, so send the person there rather than predicting it. Billing questions
+go to <billing@turbonotify.com>.
+
+## Reselling to your own customers
+
+A partner (any organization on the Empresarial plan or above) can resell
+WhatsApp: one extra number per end customer, up to 1,000. The partner adds the
+number and asks for a linking code through the API; the end customer types that
+code on their own phone under Linked devices, and the phone then shows the
+partner's organization name on that device. The partner pays the fixed monthly
+price of each extra number on top of the plan and charges its customers
+whatever it decides. Each extra number carries the full message and contact
+allowance of the plan. There is no commission, discount or partner program:
+it is resale at the normal prices.
 
 ## Messages
 
@@ -114,8 +133,9 @@ cycle rather than a rolling window:
 An organization with three numbers has three separate allowances of each. Both
 reset at the cycle end, which is a real date the customer can plan around.
 
-Plans: Gratuito, Lobo Solitário, Empresarial, and a Personalizado tier arranged
-directly. Prices and limits are on the pricing page; do not quote figures from
+Plans: Gratuito (Free), Lobo Solitário (Lone Wolf), Empresarial (Business),
+and a Personalizado (Custom) tier arranged directly. Prices are in BRL in
+Brazil and in USD everywhere else. Prices and limits are on the pricing page; do not quote figures from
 memory, because they change.
 
 A message's *content* (its text, caption or media reference) also has a
@@ -129,8 +149,9 @@ was sent or received) survives 12 fixed months on every plan regardless.
 
 ## Webhooks and events
 
-Turbo Notify delivers events to a URL the customer registers. Every delivery is
-signed: `X-Webhook-Signature` is `sha256=<hex>`, an HMAC-SHA256 of
+Turbo Notify delivers events to a URL the customer registers. When the customer
+sets a signing secret (recommended), every delivery is signed:
+`X-Webhook-Signature` is `sha256=<hex>`, an HMAC-SHA256 of
 `{X-Webhook-Timestamp}.{raw_body}` with the customer's secret. Deliveries older
 than about five minutes should be rejected.
 
@@ -180,6 +201,8 @@ person holding the phone, so they stay in the dashboard.
 ## Where to send someone
 
 - Documentation: <https://docs.turbonotify.com>
-- Dashboard: <https://app.turbonotify.com>
+- Dashboard: <https://dashboard.turbonotify.com>
 - Webhook Inspector, for testing deliveries: <https://webhook.turbonotify.com>
 - MCP server reference: <https://docs.turbonotify.com/general/mcp-server/>
+- Building an AI agent: <https://docs.turbonotify.com/guides/ai-agent/>
+- Support: <support@turbonotify.com>, sales and resale: <sales@turbonotify.com>

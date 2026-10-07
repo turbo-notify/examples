@@ -36,6 +36,8 @@ def test_it_covers_the_topics_this_attendant_gets_asked_about() -> None:
         "not_configured",
         "retention",
         "typing indicator",
+        "resell",
+        "dashboard.turbonotify.com",
     ):
         assert topic in text, f"reference material never mentions {topic!r}"
 

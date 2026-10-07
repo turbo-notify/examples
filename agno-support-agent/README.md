@@ -1,5 +1,13 @@
 # Support Agent with Agno and MCP
 
+> **Em português:** um atendente de WhatsApp que responde perguntas sobre o Turbo Notify. Ele
+> recebe as mensagens por webhook, decide com um modelo de linguagem e responde pelo servidor MCP
+> do Turbo Notify (hospedado em `https://mcp.turbonotify.com`, autenticado com a sua API Key). Você
+> precisa de uma conta com um número conectado (no dashboard, em **Números**), de uma API Key (em
+> **API Keys**) e de um plano com webhooks (Lobo Solitário ou superior). Para entender o padrão e
+> os cuidados contra instruções escondidas nas mensagens (prompt injection), veja o
+> [guia de agentes de IA](https://docs.turbonotify.com/guides/ai-agent/). As instruções abaixo estão em inglês.
+
 A WhatsApp support attendant that answers questions about Turbo Notify. It receives messages by
 webhook, decides with an LLM, and replies **through the Turbo Notify MCP server**, the same tools
 any agent gets, chosen by the model rather than hard-coded here.
@@ -25,13 +33,14 @@ WhatsApp ──▶ Turbo Notify ──webhook──▶ this app
 
 ## What you need
 
-- A **Turbo Notify account** with a connected WhatsApp number, and an API key from the dashboard
-  under **API Keys**. If you choose scopes for that key, this attendant needs
+- A **Turbo Notify account** with a connected WhatsApp number (dashboard, **Números**), and an API
+  key from the dashboard under **API Keys**. If you choose scopes for that key, this attendant needs
   `messages:read` (to read the question) and `messages:send` (to answer it). A key created
   with the **Acesso total** (full access) template also works as it is.
-- A **plan that includes webhooks** (SOLO or above). On FREE the dashboard refuses to register
-  the webhook this attendant listens on, and the typing indicator it shows while composing
-  also needs SOLO or above.
+- A **plan that includes webhooks**: Lone Wolf (shown as **Lobo Solitário** in the Portuguese
+  dashboard) or above. On the free plan the dashboard refuses to register the webhook this
+  attendant listens on, and the typing indicator it shows while composing also needs Lone Wolf or
+  above.
 - An **LLM API key**. Anthropic by default; OpenAI and any OpenAI-compatible endpoint (OpenRouter,
   Groq, a local server) also work.
 - **Python 3.11+** and **[Poetry](https://python-poetry.org/docs/#installation)**, or Docker.
@@ -72,7 +81,7 @@ cloudflared tunnel --url http://localhost:8080
 
 Then, in the Turbo Notify dashboard under **Webhooks**, register
 `https://<your-tunnel>/webhooks/turbo-notify`. Put the same signing secret you chose above in its
-**Secret de Assinatura** field: it has to be byte-identical to `TURBO_NOTIFY_WEBHOOK_SECRET`, or
+**Secret de Assinatura** (signing secret) field: it has to be byte-identical to `TURBO_NOTIFY_WEBHOOK_SECRET`, or
 every delivery is rejected with `401`. A webhook registered from the dashboard receives every event
 type, and this app picks out the ones it acts on, `message.received` and `message.replied`, itself
 in `inbound.py`.
@@ -137,6 +146,9 @@ the one it needs.
 
    A message never producing either line is the sign something upstream of this app never reached
    it at all: check the tunnel and the webhook registration before touching the code.
+
+For the pattern behind this example, and what to check before giving an agent more tools, read the
+[AI agent guide](https://docs.turbonotify.com/en/guides/ai-agent/) in the documentation.
 
 ---
 

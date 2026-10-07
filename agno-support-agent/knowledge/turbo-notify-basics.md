@@ -68,8 +68,8 @@ Voice notes an organization *receives* can be transcribed automatically, but
 only when Bring-Your-Own Speech-to-Text is configured for the number, under
 **Transcrição** in the dashboard. Without it, an inbound voice note still
 arrives (transcription never blocks the message itself), but its transcript
-comes back unavailable with reason `not_configured`; the other four reasons
-(`provider_error`, `timeout`, `no_adapter`, `internal_error`) mean the
+comes back unavailable with reason `not_configured`; the other five reasons
+(`provider_error`, `file_too_large`, `timeout`, `no_adapter`, `internal_error`) mean the
 integration was configured but that one attempt failed. The two are different
 situations for a person to hear about: one means "nobody has set this up",
 the other means "this usually works and did not, this time".

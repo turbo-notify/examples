@@ -211,11 +211,11 @@ class Question:
     group_id: str | None
     from_number: str | None
     #: Why a voice note has no transcript, when the webhook explains one:
-    #: `"not_configured"`, `"provider_error"`, `"timeout"`, `"no_adapter"` or
-    #: `"internal_error"`. `None` for every other content type, and also for
-    #: an audio message the webhook carried no `transcription` block for at
-    #: all. See ``responder.build_prompt`` for why `"not_configured"` gets a
-    #: different apology than the other four.
+    #: `"not_configured"`, `"provider_error"`, `"file_too_large"`, `"timeout"`,
+    #: `"no_adapter"` or `"internal_error"`. `None` for every other content
+    #: type, and also for an audio message the webhook carried no
+    #: `transcription` block for at all. See ``responder.build_prompt`` for why
+    #: `"not_configured"` gets a different apology than the other five.
     transcription_reason: str | None = None
 
 

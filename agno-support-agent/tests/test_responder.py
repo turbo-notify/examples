@@ -128,7 +128,7 @@ class TestBuildPrompt:
         assert "could not transcribe" not in prompt.lower()
 
     def test_a_transcription_provider_failure_still_describes_an_attempt(self) -> None:
-        """The other four reasons (a provider error, a timeout, and so on) ARE
+        """The other five reasons (a provider error, a timeout, and so on) ARE
 
         a transcription attempt that fell short, and the apology should keep
         saying so rather than switching to the "not set up" wording that only

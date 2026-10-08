@@ -55,8 +55,9 @@ go to <billing@turbonotify.com>.
 
 A partner (any organization on the Empresarial plan or above) can resell
 WhatsApp: one extra number per end customer, up to 1,000. The partner adds the
-number and asks for a linking code through the API; the end customer types that
-code on their own phone under Linked devices, and the phone then shows the
+number and asks for a pairing code through the API; the end customer types that
+code on their own phone (in WhatsApp: Linked devices, then Link a device, then
+Link with phone number instead), and the phone then shows the
 partner's organization name on that device. The partner pays the fixed monthly
 price of each extra number on top of the plan and charges its customers
 whatever it decides. Each extra number carries the full message and contact
@@ -85,10 +86,10 @@ available rather than suggesting a MIME type.
 
 Voice notes an organization *receives* can be transcribed automatically, but
 only when Bring-Your-Own Speech-to-Text is configured for the number, under
-**Transcrição** in the dashboard. Without it, an inbound voice note still
-arrives (transcription never blocks the message itself), but its transcript
+**Transcription** in the dashboard (**Transcrição** when it is in Portuguese).
+Without it, an inbound voice note still arrives (transcription never blocks the message itself), but its transcript
 comes back unavailable with reason `not_configured`; the other five reasons
-(`provider_error`, `file_too_large`, `timeout`, `no_adapter`, `internal_error`) mean the
+(`provider_error`, `file_too_large`, `timeout`, `provider_not_supported`, `internal_error`) mean the
 integration was configured but that one attempt failed. The two are different
 situations for a person to hear about: one means "nobody has set this up",
 the other means "this usually works and did not, this time".

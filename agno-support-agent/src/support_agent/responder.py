@@ -132,6 +132,23 @@ def _customer_data_block(question: Question) -> list[str]:
     return lines
 
 
+def _reply_arguments(question: Question) -> list[str]:
+    """The arguments `reply_to_message` must be called with for this question.
+
+    `idempotency_key` is the envelope's event id, which stays the same across
+    every redelivery of this event. A reply call that timed out may still
+    have gone out, and the model retries failed tool calls in the same turn;
+    a delivery whose answer was not confirmed is also answered again when
+    Turbo Notify redelivers it. With the same key on every attempt, Turbo
+    Notify sends the answer once, however many attempts reach it.
+    """
+    return [
+        f"  message_id: {question.message_id}",
+        f"  number_alias: {question.number_alias}",
+        f"  idempotency_key: {question.event_id}",
+    ]
+
+
 def build_prompt(question: Question) -> str:
     """Compose the turn the model actually sees.
 
@@ -179,8 +196,7 @@ def build_prompt(question: Question) -> str:
             f" {alternative}.",
             "",
             "Answer with `reply_to_message`:",
-            f"  message_id: {question.message_id}",
-            f"  number_alias: {question.number_alias}",
+            *_reply_arguments(question),
         ]
     elif question.content_type == "text":
         lines = [
@@ -193,7 +209,8 @@ def build_prompt(question: Question) -> str:
             f"  message_id: {question.message_id}",
             f"  number_alias: {question.number_alias}",
             "",
-            "Then answer with `reply_to_message`, using the same id and alias.",
+            "Then answer with `reply_to_message`:",
+            *_reply_arguments(question),
         ]
     elif question.content_type == "audio":
         lines = [
@@ -204,8 +221,7 @@ def build_prompt(question: Question) -> str:
             " not a preview.",
             "",
             "Answer with `reply_to_message`:",
-            f"  message_id: {question.message_id}",
-            f"  number_alias: {question.number_alias}",
+            *_reply_arguments(question),
         ]
     else:
         raise AssertionError(f"unhandled content_type {question.content_type!r} with a preview")

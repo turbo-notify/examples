@@ -30,7 +30,7 @@ More are coming. If you build something worth showing, open a pull request.
 ## What these examples assume
 
 - A Turbo Notify account with at least one connected WhatsApp number (in the dashboard, under
-  **Números**).
+  **Numbers**, or **Números** when the dashboard is in Portuguese).
 - An API key from the dashboard, under **API Keys**.
 - Whatever the individual example lists in its own README.
 

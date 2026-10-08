@@ -33,12 +33,12 @@ WhatsApp ──▶ Turbo Notify ──webhook──▶ this app
 
 ## What you need
 
-- A **Turbo Notify account** with a connected WhatsApp number (dashboard, **Números**), and an API
+- A **Turbo Notify account** with a connected WhatsApp number (dashboard, **Numbers**), and an API
   key from the dashboard under **API Keys**. If you choose scopes for that key, this attendant needs
   `messages:read` (to read the question) and `messages:send` (to answer it). A key created
-  with the **Acesso total** (full access) template also works as it is.
-- A **plan that includes webhooks**: Lone Wolf (shown as **Lobo Solitário** in the Portuguese
-  dashboard) or above. On the free plan the dashboard refuses to register the webhook this
+  with the **Full access** template also works as it is.
+- A **plan that includes webhooks**: Lone Wolf (**Lobo Solitário** when the dashboard is in
+  Portuguese) or above. On the free plan the dashboard refuses to register the webhook this
   attendant listens on, and the typing indicator it shows while composing also needs Lone Wolf or
   above.
 - An **LLM API key**. Anthropic by default; OpenAI and any OpenAI-compatible endpoint (OpenRouter,
@@ -81,7 +81,7 @@ cloudflared tunnel --url http://localhost:8080
 
 Then, in the Turbo Notify dashboard under **Webhooks**, register
 `https://<your-tunnel>/webhooks/turbo-notify`. Put the same signing secret you chose above in its
-**Secret de Assinatura** (signing secret) field: it has to be byte-identical to `TURBO_NOTIFY_WEBHOOK_SECRET`, or
+**Signing secret** field (**Secret de Assinatura** when the dashboard is in Portuguese): it has to be byte-identical to `TURBO_NOTIFY_WEBHOOK_SECRET`, or
 every delivery is rejected with `401`. A webhook registered from the dashboard receives every event
 type, and this app picks out the ones it acts on, `message.received` and `message.replied`, itself
 in `inbound.py`.
@@ -155,7 +155,7 @@ For the pattern behind this example, and what to check before giving an agent mo
 ## Troubleshooting
 
 **Every delivery gets a `401`.** The signing secret in `.env` and the one in the dashboard's
-**Secret de Assinatura** field have to be byte-identical, including no trailing space either side.
+**Signing secret** field have to be byte-identical, including no trailing space either side.
 Send a test delivery from the Webhook Inspector (<https://webhook.turbonotify.com>) to confirm the
 secret before suspecting the code.
 
@@ -214,7 +214,8 @@ everybody: the address is not a secret, the key is.
 ### The agent replies through a tool, not through this code
 
 `responder.py` never sends anything. It tells the model the message id and the number alias, and
-asks it to call `reply_to_message`. So the reply takes the same path as any other action the model
+asks it to call `reply_to_message` with the webhook's event id as its `idempotency_key`, so a
+delivery that arrives twice never sends the reply twice. So the reply takes the same path as any other action the model
 decides to take, and there is no special-cased "and then we send it" step that only works for the
 shape somebody anticipated.
 
@@ -329,9 +330,9 @@ an apology that implies a transcription attempt that never happened.
 
 **Losing a genuine failure forever.** An event id is only marked answered once `reply_to_message`
 actually delivers. A run that fails (the model errored, the reply tool was refused, a network call
-dropped) releases the id instead of leaving it marked answered, so the retry Turbo Notify already
-sends for a non-2xx delivery still reaches the model, rather than being dropped as an
-already-handled duplicate.
+dropped) releases the id instead of leaving it marked answered, so on plans with webhook retries
+the redelivery Turbo Notify sends after a non-2xx response still reaches the model, rather than
+being dropped as an already-handled duplicate.
 
 **A crafted display name or message steering the model.** `from_name` and `preview` are both
 written by a stranger. `inbound.py` strips control characters and caps the length of both before

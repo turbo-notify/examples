@@ -49,6 +49,21 @@ class TestBuildPrompt:
         assert "msg_" + "a" * 32 in prompt
         assert "support" in prompt
 
+    def test_every_reply_carries_the_event_id_as_its_idempotency_key(self) -> None:
+        """A retried reply must never reach the customer twice.
+
+        The model retries a failed tool call in the same turn, and a timed-out
+        call may still have been sent; a redelivered event is answered again
+        too. The event id is the same on every one of those attempts, so it is
+        the key that makes Turbo Notify send the answer once.
+        """
+        for question in (
+            _question(),
+            _question(content_type="audio"),
+            _question(content_type="image", preview=None),
+        ):
+            assert f"idempotency_key: {question.event_id}" in build_prompt(question)
+
     def test_it_asks_for_exactly_one_reply(self) -> None:
         """Without this the model happily sends a follow-up the customer pays for."""
         prompt = build_prompt(_question())

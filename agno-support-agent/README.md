@@ -52,6 +52,11 @@ WhatsApp ──▶ Turbo Notify ──webhook──▶ this app
 You do not need anything for the MCP server itself. Turbo Notify hosts it at
 `https://mcp.turbonotify.com`, and your API key is what identifies your account on it.
 
+The same URL can also be connected with login: an MCP client you use yourself (an editor or a chat
+app) opens a consent page where you sign in and approve access, and needs no key. This example keeps
+using an API key in a header on purpose, because the attendant runs unattended and has no browser in
+which anyone could approve a connection.
+
 ---
 
 ## Run it

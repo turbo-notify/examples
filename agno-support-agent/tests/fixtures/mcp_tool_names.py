@@ -26,7 +26,7 @@ Then replace the frozenset below with the result.
 
 from __future__ import annotations
 
-#: 32 tools, as of the tool catalogue documented at
+#: 36 tools, as of the tool catalogue documented at
 #: <https://docs.turbonotify.com/general/mcp-server/>.
 KNOWN_MCP_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -39,7 +39,10 @@ KNOWN_MCP_TOOL_NAMES: frozenset[str] = frozenset(
         "send_cta_button",
         # Acting on a message.
         "reply_to_message",
-        "edit_message",
+        "edit_text_message",
+        "edit_calendar_event",
+        "cancel_calendar_event",
+        "edit_media_caption",
         "delete_message",
         "react_to_message",
         "send_typing_indicator",
@@ -50,6 +53,7 @@ KNOWN_MCP_TOOL_NAMES: frozenset[str] = frozenset(
         "get_message_status",
         "get_message_receipts",
         "get_message_reactions",
+        "get_message_responses",
         # Contacts.
         "list_contacts",
         "get_contact",

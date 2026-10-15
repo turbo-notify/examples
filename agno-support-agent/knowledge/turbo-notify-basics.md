@@ -47,9 +47,11 @@ scheduled. Only `connected` can send.
 
 - `disconnected` means the link to the phone still exists and the connection
   dropped. Reconnecting needs no QR code and no human.
-- `revoked` means the phone unlinked the device. The main number is re-paired
-  from the dashboard by a person. An extra number can be re-paired through the
-  API, and either way somebody has to act on the phone.
+- `revoked` means the phone unlinked the device. It has to be paired again by
+  a person holding the phone. The main number is paired again from the
+  dashboard (QR code or pairing code). An extra number can be paired again
+  from the dashboard (QR code or pairing code) or through the API (QR code or
+  pairing code). The agent cannot pair a number.
 
 Adding an extra number is charged immediately, before it is provisioned. A
 number removed right after it was added can be refunded automatically;

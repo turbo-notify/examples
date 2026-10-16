@@ -56,6 +56,9 @@ def test_it_teaches_the_current_retention_and_pairing_facts() -> None:
     assert "QR code" in text
     # Disconnecting does not stop billing; only removing does.
     assert "billed every cycle until it is removed" in text
+    # A scheduled removal is a date, not a status, and the number keeps working.
+    assert "pending_deletion" not in text
+    assert "keeps working until its" in text
 
 
 def test_the_order_is_stable(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:

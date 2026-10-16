@@ -41,9 +41,10 @@ is addressed by an **alias**: the literal `main`, or a name the customer chose
 for an extra one.
 
 A number's status is one of: `pending`, `pairing`, `inactive`, `connecting`,
-`connected`, `disconnected`, `reconnecting`, `failed`, `revoked`, and for an
-extra number also `pending_deletion`, which overrides the rest once a removal is
-scheduled. Only `connected` can send.
+`connected`, `disconnected`, `reconnecting`, `failed`, `revoked`. Only
+`connected` can send. A removal that is scheduled does not change the status: it
+is a separate date, `scheduled_deletion_at`, and the number keeps working until
+then.
 
 - `disconnected` means the link to the phone still exists and the connection
   dropped. Reconnecting needs no QR code and no human.
@@ -55,10 +56,11 @@ scheduled. Only `connected` can send.
 
 Adding an extra number is charged immediately, before it is provisioned. A
 number removed right after it was added can be refunded automatically;
-otherwise its removal is scheduled for the end of the cycle already paid, with
-no refund, and it is not charged again after that. A number has to be
-disconnected before it can be removed. Disconnecting alone does not stop the
-charge: a disconnected extra number is billed every cycle until it is removed.
+otherwise its removal is scheduled for the end of the period already paid, with
+no refund, and it is not charged again after that. A number can be removed
+whether it is connected or not, and a scheduled number keeps working until its
+removal date. Disconnecting alone does not stop the charge: a disconnected extra
+number is billed every cycle until it is removed.
 Before confirming a removal, the dashboard shows which of the two applies to
 that number, so send the person there rather than predicting it. Billing
 questions go to <billing@turbonotify.com>.

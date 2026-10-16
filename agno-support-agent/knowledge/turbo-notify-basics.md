@@ -55,10 +55,13 @@ scheduled. Only `connected` can send.
 
 Adding an extra number is charged immediately, before it is provisioned. A
 number removed right after it was added can be refunded automatically;
-otherwise it stays active until the end of the cycle already paid. Before
-confirming a removal, the dashboard shows which of the two applies to that
-number, so send the person there rather than predicting it. Billing questions
-go to <billing@turbonotify.com>.
+otherwise its removal is scheduled for the end of the cycle already paid, with
+no refund, and it is not charged again after that. A number has to be
+disconnected before it can be removed. Disconnecting alone does not stop the
+charge: a disconnected extra number is billed every cycle until it is removed.
+Before confirming a removal, the dashboard shows which of the two applies to
+that number, so send the person there rather than predicting it. Billing
+questions go to <billing@turbonotify.com>.
 
 ## Reselling to your own customers
 

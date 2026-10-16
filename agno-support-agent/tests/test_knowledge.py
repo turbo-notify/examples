@@ -42,6 +42,20 @@ def test_it_covers_the_topics_this_attendant_gets_asked_about() -> None:
         assert topic in text, f"reference material never mentions {topic!r}"
 
 
+def test_it_teaches_the_current_retention_and_pairing_facts() -> None:
+    """Both were wrong once, and the attendant repeats whatever it reads.
+
+    Content is retained for hours (1 hour on every plan to start), and an expired
+    message is still returned with ``content_expired``, not "not found". A
+    partner's customer can link a number with a pairing code or a QR code.
+    """
+    text = load_knowledge()
+    assert "content_expired" in text
+    assert "1 hour" in text
+    assert "3 fixed days" not in text
+    assert "QR code" in text
+
+
 def test_the_order_is_stable(tmp_path: pathlib.Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """An unstable prefix invalidates prompt caching on every single run.
 

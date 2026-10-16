@@ -64,10 +64,12 @@ go to <billing@turbonotify.com>.
 
 A partner (any organization on the Empresarial plan or above) can resell
 WhatsApp: one extra number per end customer, up to 1,000. The partner adds the
-number and asks for a pairing code through the API; the end customer types that
-code on their own phone (in WhatsApp: Linked devices, then Link a device, then
-Link with phone number instead), and the phone then shows the
-partner's organization name on that device. The partner pays the fixed monthly
+number and asks for a pairing code or a QR code through the API; the end
+customer types the code on their own phone (in WhatsApp: Linked devices, then
+Link a device, then Link with phone number instead) or, when they see the
+partner's screen on a computer, scans the QR code (Linked devices, then Link a
+device), and the phone then shows the partner's organization name on that
+device. The partner pays the fixed monthly
 price of each extra number on top of the plan and charges its customers
 whatever it decides. Each extra number carries the full message and contact
 allowance of the plan. There is no commission, discount or partner program:
@@ -149,13 +151,14 @@ Brazil and in USD everywhere else. Prices and limits are on the pricing page; do
 memory, because they change.
 
 A message's *content* (its text, caption or media reference) also has a
-retention window that is shorter than its metadata: Gratuito and Lobo Solitário
-keep content for 3 fixed days; Empresarial keeps it 3 days by default with the
-option to extend to 30 or 90; a Personalizado plan has whatever window is in
-its contract. After that window, the content is permanently gone: fetching the
-message by id returns not found, the same shape as a message that never
-existed. The message's metadata (that it existed, its final status, when it
-was sent or received) survives 12 fixed months on every plan regardless.
+retention window that is shorter than its metadata. The window is counted in
+hours and every plan starts at 1 hour: Gratuito keeps 1 hour, Lobo Solitário
+lets the customer choose 1 or 7 hours, and Empresarial and Personalizado let the
+customer choose 1, 7, 24 or 72 hours. After that window the content is gone but
+the message is still there: fetching it by id returns the message with
+`content_expired: true` and empty content. The message's metadata (that it
+existed, its final status, when it was sent or received) stays for 12 months on
+every plan regardless.
 
 ## Webhooks and events
 

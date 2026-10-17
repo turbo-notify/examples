@@ -257,6 +257,12 @@ message can try to aim.
 sentence in the prompt asking it not to. `reply_to_message` cannot be aimed: it answers the message
 it was handed and takes no recipient of its own.
 
+The price of that is the quote: `reply_to_message` always quotes the message it answers, which a
+person would not do for every answer in a chat. This example accepts it to keep the recipient out of
+the model's hands. If you want plain, unquoted answers, take the tool away from the model entirely:
+let it return the text and have your own code send it with `send_text` to the sender the webhook
+named. Keep `reply_to_message` for bringing an earlier message back into view.
+
 **The half that is easy to miss: reading.** A Turbo Notify API key is scoped to the
 **organization**, not to a conversation. `list_messages`, `list_contacts` and `list_groups` return
 the whole inbox, for any number that key reaches, and they take the number alias as an argument the

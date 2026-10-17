@@ -1,12 +1,14 @@
-"""Turning one inbound question into one reply.
+"""Turning one inbound question into one answer.
 
 Kept apart from the web layer on purpose: everything here is testable without a
 server, and everything in ``webhook.py`` is testable without a model.
 
-The agent replies **through an MCP tool**, not by returning text this module
-then sends. That is the point of the example: the reply travels the same path
-as any other action the model decides to take, so there is no special-cased
-"and then we send it" step that only works for the happy shape.
+The model **writes** the answer and this code **sends** it. The model is given
+no tool that sends anything, so nothing a stranger writes can aim a message at
+anyone: the recipient is computed here, from the verified webhook, and the
+model's whole contribution is the text. The answer goes out as a normal message
+in the chat, the way a person answers, not as a quote of the message it
+answers. See ``ALLOWED_TOOLS`` in ``agent.py`` for the reasoning.
 """
 
 from __future__ import annotations
@@ -44,26 +46,23 @@ class Attendant(Protocol):
         """
         ...
 
+    async def send_answer(self, question: Question, text: str) -> str:
+        """Send `text` to whoever asked `question`, and return the tool's result.
 
-#: The tool whose success *is* the reply. Named here rather than in the log
-#: line so the check and the prompt cannot drift apart.
-REPLY_TOOL = "reply_to_message"
+        The recipient is NOT a parameter, on purpose: it is computed from the
+        question, which was parsed from the verified webhook, so no text the
+        model wrote can change where the answer goes. The return value is the
+        `send_text` tool's result as text, which :func:`answer` inspects to
+        decide whether the customer was actually answered. A transport failure
+        raises; a refusal from the server comes back as text.
+        """
+        ...
 
-#: Phrases the agent library uses when a tool call did NOT deliver.
-#:
-#: Kept only to pin against the library's source, NOT as the detection itself:
-#: see `read_outcome` for why matching prose is the wrong shape. There are three
-#: of them and none is obvious. A refused or failed tool call is not an
-#: exception and does not set the call's error flag: the library catches it,
-#: turns it into ordinary result *text*, and records the call as a SUCCESS with
-#: ``tool_call_error=False``. Detection built on the first phrase alone missed
-#: the other two, one of which is the timeout path, which is the likeliest real
-#: failure of all (the MCP toolkit defaults to a 10-second timeout).
-MCP_FAILURE_PHRASES = (
-    "Error from MCP tool",  # the server answered with an error payload
-    "The MCP server may be unreachable or the request timed out.",  # MCPError
-    "Error: ",  # anything else, e.g. a connection error
-)
+
+#: The tool that delivers the answer. Called by this application's own code,
+#: never by the model. Named here so the check, the log detail and the tests
+#: cannot drift apart.
+SEND_TOOL = "send_text"
 
 
 @dataclass(frozen=True)
@@ -132,29 +131,14 @@ def _customer_data_block(question: Question) -> list[str]:
     return lines
 
 
-def _reply_arguments(question: Question) -> list[str]:
-    """The arguments `reply_to_message` must be called with for this question.
-
-    `idempotency_key` is the envelope's event id, which stays the same across
-    every redelivery of this event. A reply call that timed out may still
-    have gone out, and the model retries failed tool calls in the same turn;
-    a delivery whose answer was not confirmed is also answered again when
-    Turbo Notify redelivers it. With the same key on every attempt, Turbo
-    Notify sends the answer once, however many attempts reach it.
-    """
-    return [
-        f"  message_id: {question.message_id}",
-        f"  number_alias: {question.number_alias}",
-        f"  idempotency_key: {question.event_id}",
-    ]
-
-
 def build_prompt(question: Question) -> str:
     """Compose the turn the model actually sees.
 
-    The message id and alias are stated in the prompt because the model needs
-    them to call `reply_to_message`, and it has no other way to learn them:
-    they arrived on the webhook envelope, not in the conversation.
+    The message id and alias are stated in the prompt only where the model
+    needs them, to call `get_message`, and it has no other way to learn them:
+    they arrived on the webhook envelope, not in the conversation. Where it
+    needs no tool they are left out. Nothing about the recipient or the event
+    id is here at all: the model writes the answer and this code sends it.
 
     Everything else here is context that changes the answer: whether this is
     a group, where a wall of text is worse than in a one-to-one chat.
@@ -195,8 +179,7 @@ def build_prompt(question: Question) -> str:
             f"{what_happened} Apologize briefly, in the customer's own language, and"
             f" {alternative}.",
             "",
-            "Answer with `reply_to_message`:",
-            *_reply_arguments(question),
+            "Write that as your final message.",
         ]
     elif question.content_type == "text":
         lines = [
@@ -209,8 +192,8 @@ def build_prompt(question: Question) -> str:
             f"  message_id: {question.message_id}",
             f"  number_alias: {question.number_alias}",
             "",
-            "Then answer with `reply_to_message`:",
-            *_reply_arguments(question),
+            "Then write your answer as your final message. Write nothing before the",
+            "tool call: only your final message is sent.",
         ]
     elif question.content_type == "audio":
         lines = [
@@ -220,13 +203,16 @@ def build_prompt(question: Question) -> str:
             " transcribed it in full, so the message above is everything they said,"
             " not a preview.",
             "",
-            "Answer with `reply_to_message`:",
-            *_reply_arguments(question),
+            "Write your answer as your final message.",
         ]
     else:
         raise AssertionError(f"unhandled content_type {question.content_type!r} with a preview")
 
-    lines.append("Reply exactly once. Do not send any other message.")
+    lines.append(
+        "Write one answer only. Your final message is sent to the customer exactly as"
+        " you write it, so it holds the answer and nothing else. You have no tool for"
+        " sending it."
+    )
     if question.is_group:
         lines.insert(
             len(data_block),
@@ -235,17 +221,33 @@ def build_prompt(question: Question) -> str:
     return "\n".join(lines)
 
 
-def _is_a_delivered_reply(text: str) -> bool:
-    """Whether one `reply_to_message` result is the shape a DELIVERY has.
+def recipient_arguments(question: Question) -> dict[str, str] | None:
+    """Who an answer (or a "typing…") to this question is addressed to.
+
+    A group if this is a group message, the sender's own number otherwise.
+    Computed from the verified webhook and from nothing else: this is the one
+    place a recipient is ever chosen, and the model never sees it, so no text a
+    stranger writes can move it. `None` when the webhook named neither, which
+    was enough to build a `Question` but leaves nobody to answer.
+    """
+    if question.group_id:
+        return {"group_id": question.group_id}
+    if question.from_number:
+        return {"number": question.from_number}
+    return None
+
+
+def _is_a_delivered_send(text: str) -> bool:
+    """Whether one `send_text` result is the shape a DELIVERY has.
 
     Identified positively, not by hunting for failure phrases. Matching prose
-    was tried and was wrong twice: the library has three separate failure exits,
-    each returning a differently-worded string, and detection built on the one
-    that was noticed reported the other two as answered customers. Enumerating
-    somebody else's error messages is a losing game, because the set only grows
-    and nothing tells you when it does.
+    was tried on an earlier version of this example and was wrong twice: a
+    refused or failed call comes back in several differently-worded strings,
+    and detection built on the one that was noticed reported the others as
+    answered customers. Enumerating somebody else's error messages is a losing
+    game, because the set only grows and nothing tells you when it does.
 
-    A delivered reply is the tool's own return value, a JSON object carrying the
+    A delivered send is the tool's own return value, a JSON object carrying the
     new message's id. Every failure exit returns human prose instead. So the
     question asked here is "does this look like a result?" rather than "does
     this look like one of the failures I know about", and an unrecognised shape
@@ -262,19 +264,46 @@ def _is_a_delivered_reply(text: str) -> bool:
     return isinstance(payload, dict) and bool(payload.get("message_id"))
 
 
-def read_outcome(result: object) -> tuple[bool, str | None]:
-    """Decide whether the customer actually got a reply.
+def _final_answer_text(result: object) -> str | None:
+    """The text the model wrote as its LAST message, or `None` if it wrote none.
 
-    Two things stand between "the turn finished" and "somebody was answered",
-    and neither raises:
+    The library's ``content`` is not that. Across a turn that calls a tool it
+    concatenates every assistant message, so a model that says "Let me read the
+    message first." before calling `get_message` would have that sentence sent
+    to the customer in front of the answer. When the run carries its messages,
+    the last assistant message that is not itself a tool call is the answer,
+    and a run that ends on a tool call has produced none. ``content`` is only
+    the fallback for a result that carries no messages at all.
+
+    Read by attribute, same as everything about the library's result here.
+    """
+    messages = getattr(result, "messages", None)
+    if messages:
+        for message in reversed(messages):
+            if getattr(message, "role", None) != "assistant":
+                continue
+            if getattr(message, "tool_calls", None):
+                return None
+            content = getattr(message, "content", None)
+            return content if isinstance(content, str) and content.strip() else None
+        return None
+    content = getattr(result, "content", None)
+    return content if isinstance(content, str) and content.strip() else None
+
+
+def read_answer(result: object) -> tuple[str | None, str | None]:
+    """Pull the model's answer out of a finished run: `(text, None)` or `(None, why)`.
+
+    Two things stand between "the turn finished" and "there is an answer to
+    send", and neither raises:
 
     * **The run failed.** A model that returns 404, or runs out of context, ends
       as a completed coroutine with an error status on the result. Nothing is
       thrown, so a bare ``await`` looks exactly like success. This example
       logged "Answered msg_… on main" through an entire outage.
-    * **The model never called the tool.** It can answer in plain text instead,
-      which reaches nobody: the reply travels through ``reply_to_message`` or it
-      does not travel at all.
+    * **The model wrote nothing.** It can end its turn on a tool call, or with
+      an empty message. There is then nothing to send, and sending an empty
+      string would be refused anyway.
 
     Read by attribute rather than by type, because :class:`Attendant` promises
     only "whatever the library returns" and this module deliberately imports no
@@ -282,41 +311,64 @@ def read_outcome(result: object) -> tuple[bool, str | None]:
     """
     status = getattr(result, "status", None)
     if status is not None and str(getattr(status, "value", status)).upper() != "COMPLETED":
-        return False, f"the run ended {str(getattr(status, 'value', status)).lower()}"
+        return None, f"the run ended {str(getattr(status, 'value', status)).lower()}"
 
-    # Every call in the turn, not the first match. A failed tool call is fed
-    # back to the model, which routinely tries again in the same turn, and the
-    # list holds both attempts in order. Stopping at the first `reply_to_message`
-    # would report a customer who WAS answered on the retry as unanswered, which
-    # is this same defect pointing the other way: a log full of false alarms is
-    # a log nobody reads.
-    calls = getattr(result, "tools", None) or []
-    failures: list[str] = []
-    for call in calls:
-        if getattr(call, "tool_name", None) != REPLY_TOOL:
-            continue
-        text = str(getattr(call, "result", "") or "")
-        if not getattr(call, "tool_call_error", None) and _is_a_delivered_reply(text):
-            return True, None
-        failures.append(text or "the tool call failed")
-
-    if failures:
-        return False, f"`{REPLY_TOOL}` failed: {failures[-1]}"
-    return False, f"the model never called `{REPLY_TOOL}`"
+    text = _final_answer_text(result)
+    if text is None:
+        return None, "the model produced no answer text"
+    return text.strip(), None
 
 
 async def answer(question: Question, attendant: Attendant) -> Answered:
-    """Hand one question to the agent and let it reply through its tools."""
+    """Have the model write the answer to one question, then send it.
+
+    Four ways to end without an answered customer, each with its own `detail`
+    so the log says which one it was: nobody to send to, a run that failed or
+    wrote nothing, a send the server refused, and a send that never got there.
+    """
     prompt = build_prompt(question)
+
+    def unanswered(detail: str) -> Answered:
+        return Answered(
+            message_id=question.message_id,
+            number_alias=question.number_alias,
+            prompt=prompt,
+            replied=False,
+            detail=detail,
+        )
+
+    if recipient_arguments(question) is None:
+        return unanswered(
+            "the webhook named neither a group nor a sender, so there is nobody to answer"
+        )
+
     result = await attendant.arun(prompt)
-    replied, detail = read_outcome(result)
+    text, problem = read_answer(result)
+    if text is None:
+        return unanswered(problem or "the model produced no answer text")
+
+    try:
+        sent = await attendant.send_answer(question, text)
+    except Exception as exc:
+        return unanswered(f"`{SEND_TOOL}` was unreachable: {type(exc).__name__}: {exc}")
+
+    if not _is_a_delivered_send(sent):
+        return unanswered(f"`{SEND_TOOL}` was refused: {sent or 'no result'}")
+
     return Answered(
         message_id=question.message_id,
         number_alias=question.number_alias,
         prompt=prompt,
-        replied=replied,
-        detail=detail,
+        replied=True,
     )
 
 
-__all__ = ["REPLY_TOOL", "Answered", "Attendant", "answer", "build_prompt", "read_outcome"]
+__all__ = [
+    "SEND_TOOL",
+    "Answered",
+    "Attendant",
+    "answer",
+    "build_prompt",
+    "read_answer",
+    "recipient_arguments",
+]

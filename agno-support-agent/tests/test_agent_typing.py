@@ -1,7 +1,8 @@
 """Showing "typing…" by calling the MCP server directly, never through the model.
 
 `send_typing_indicator` takes an arbitrary recipient, the same shape every
-other excluded tool has (see `test_agent_tools.py`). What makes it safe to use
+other excluded tool has (see `test_agent_tools.py`; sending the answer is in
+`test_agent_send.py`). What makes it safe to use
 at all is that nothing here ever hands the model a chance to choose that
 recipient: `AgnoAttendant.show_typing` computes it from the verified webhook
 sender and calls the raw MCP session directly.
@@ -11,8 +12,9 @@ from __future__ import annotations
 
 from typing import Any
 
-from support_agent.agent import AgnoAttendant, _typing_arguments
+from support_agent.agent import AgnoAttendant
 from support_agent.inbound import Question
+from support_agent.responder import recipient_arguments
 
 
 def _question(**overrides: Any) -> Question:
@@ -31,19 +33,19 @@ def _question(**overrides: Any) -> Question:
     return Question(**base)
 
 
-class TestTypingArguments:
+class TestRecipientArguments:
     def test_a_one_to_one_question_targets_the_sender(self) -> None:
-        assert _typing_arguments(_question()) == {"number": "5511999999999"}
+        assert recipient_arguments(_question()) == {"number": "5511999999999"}
 
     def test_a_group_question_targets_the_group_not_a_member(self) -> None:
-        args = _typing_arguments(
+        args = recipient_arguments(
             _question(is_group=True, group_id="grp_" + "b" * 32, from_number="5511999999999")
         )
         assert args == {"group_id": "grp_" + "b" * 32}
 
     def test_neither_identifier_present_is_unusable(self) -> None:
-        """Enough to build a `Question` at all is not enough to type-indicate."""
-        assert _typing_arguments(_question(from_number=None)) is None
+        """Enough to build a `Question` at all is not enough to address anyone."""
+        assert recipient_arguments(_question(from_number=None)) is None
 
 
 class _FakeResult:
@@ -56,7 +58,7 @@ class _FakeSession:
         self.calls: list[tuple[str, dict[str, Any]]] = []
         self._is_error = is_error
 
-    async def call_tool(self, name: str, arguments: dict[str, Any]) -> _FakeResult:
+    async def call_tool(self, name: str, arguments: dict[str, Any], **_options: Any) -> _FakeResult:
         self.calls.append((name, arguments))
         return _FakeResult(is_error=self._is_error)
 

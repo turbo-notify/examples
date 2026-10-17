@@ -21,7 +21,7 @@ own code would.
 
 | Example | What it shows |
 |---|---|
-| [**agno-support-agent**](./agno-support-agent) | A WhatsApp support attendant that answers questions about Turbo Notify, built with [Agno](https://agno.com) and driven entirely through the [Turbo Notify MCP Server](https://docs.turbonotify.com/general/mcp-server/). Receives inbound messages by webhook, decides with an LLM, and replies through an MCP tool. |
+| [**agno-support-agent**](./agno-support-agent) | A WhatsApp support attendant that answers questions about Turbo Notify, built with [Agno](https://agno.com) and driven entirely through the [Turbo Notify MCP Server](https://docs.turbonotify.com/general/mcp-server/). Receives inbound messages by webhook, has an LLM write the answer (its only tool reads one message), and sends it as a normal message through the MCP server. |
 
 More are coming. If you build something worth showing, open a pull request.
 
@@ -44,9 +44,11 @@ REST endpoints directly. That is not a different API: it is the same public API,
 tools an LLM can choose between, with schemas it can read.
 
 If you are building an agent, that is usually what you want: you describe the goal, and the model
-picks `send_text` or `reply_to_message` or `get_number` on its own. If you are building a
-deterministic integration, call the REST API directly instead; both are supported and both are
-documented.
+picks `get_message` or `get_number` on its own. Be sparing with the tools that send: the safest
+agent is one whose model has no send tool at all, writes the answer as text, and leaves the sending
+(`send_text`, to the sender the webhook named) to your own code, as `agno-support-agent` does. If
+you are building a deterministic integration, call the REST API directly instead; both are
+supported and both are documented.
 
 Building an agent of your own? Start with the [AI agent guide](https://docs.turbonotify.com/en/guides/ai-agent/) in the documentation: it
 walks through the same pattern these examples use (webhook in, MCP out) and how to keep a message

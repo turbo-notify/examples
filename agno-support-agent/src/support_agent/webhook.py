@@ -208,12 +208,12 @@ async def _answer_safely(
     logged with the message id, which is what makes it findable afterwards.
 
     A failure here is usually *not* an exception, though. A model that returns
-    404, or a model that answers in plain text instead of calling the reply
-    tool, both come back as an ordinary result. So the log reports what
-    :func:`answer` observed, not merely that it returned.
+    404, a model that writes nothing, and a send the server refuses all come
+    back as an ordinary result. So the log reports what :func:`answer`
+    observed, not merely that it returned.
 
     ``seen`` is only ever moved forward here: to `"answered"` on a real
-    reply, or removed entirely on anything else, so a redelivery after a
+    delivery, or removed entirely on anything else, so a redelivery after a
     genuine failure is not permanently ignored. A customer whose first
     attempt failed still gets a second one, on the retry Turbo Notify already
     sends.

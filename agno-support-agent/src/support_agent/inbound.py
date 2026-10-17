@@ -200,14 +200,15 @@ class Question:
     preview: str | None
     from_name: str | None
     is_group: bool
-    #: Who to show "typing…" to while the model composes an answer: the
-    #: group, if this is a group message, or the sender's own number
-    #: otherwise. Never a value the model chose: `send_typing_indicator`
-    #: takes an arbitrary recipient, same as `send_text` does, and `webhook.py`
-    #: calls it directly with THIS value rather than handing it to the model,
-    #: which is the whole reason it is safe to use at all despite not being in
-    #: `ALLOWED_TOOLS`. `None` when the webhook carried neither (malformed
-    #: enough to be unusable for this, not enough to reject the question).
+    #: Who the answer goes to, and who to show "typing…" to while the model
+    #: composes it: the group, if this is a group message, or the sender's own
+    #: number otherwise (see `responder.recipient_arguments`). Never a value the
+    #: model chose: `send_typing_indicator` and `send_text` both take an
+    #: arbitrary recipient, and `AgnoAttendant` calls them directly with THESE
+    #: values rather than handing either tool to the model, which is the whole
+    #: reason they are safe to use at all despite not being in `ALLOWED_TOOLS`.
+    #: Both `None` when the webhook carried neither (malformed enough to leave
+    #: nobody to answer, not enough to reject the question).
     group_id: str | None
     from_number: str | None
     #: Why a voice note has no transcript, when the webhook explains one:
@@ -256,10 +257,10 @@ def parse_question(
 
     # Both are inbound message events, and the second one is not optional. A
     # message that quotes another is delivered as `message.replied`, never as
-    # `message.received`. This attendant answers with `reply_to_message`,
-    # which quotes: so long-press and Reply, the gesture its own answer
-    # invites, has to stay answerable, or a conversation goes silent the
-    # moment the customer replies to it.
+    # `message.received`. This attendant answers with a normal message, but a
+    # customer is free to long-press and Reply to anything in the chat, its
+    # last answer included: that has to stay answerable, or a conversation goes
+    # silent the moment the customer quotes something.
     if event.get("type") not in ANSWERABLE_EVENTS:
         raise InboundRejectedError(f"not a question: {event.get('type')!r}")
 
@@ -339,12 +340,12 @@ def parse_question(
     message_id = data.get("id")
     if not isinstance(message_id, str) or not message_id:
         raise InboundRejectedError(
-            "message has no id, so there is nothing to reply to", malformed=True
+            "message has no id, so there is nothing to answer", malformed=True
         )
 
     # The envelope's `number_alias` says which of your numbers received this.
     # It is required rather than defaulted: ids are scoped to a number, so
-    # replying under the wrong alias is a 404 rather than a wrong answer.
+    # answering under the wrong alias is a 404 rather than a wrong answer.
     event_id = event.get("id")
     if not isinstance(event_id, str) or not event_id:
         raise InboundRejectedError("envelope has no id", malformed=True)

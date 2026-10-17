@@ -12,6 +12,7 @@ from pathlib import Path
 
 from support_agent.agent import ALLOWED_TOOLS, INSTRUCTIONS, build_mcp_tools
 from support_agent.config import Settings
+from support_agent.responder import SEND_TOOL
 
 from .fixtures.mcp_tool_names import KNOWN_MCP_TOOL_NAMES
 from .fixtures.settings import settings_ignoring_dotenv
@@ -19,12 +20,12 @@ from .fixtures.settings import settings_ignoring_dotenv
 #: Tools that pick their own recipient. Reachable from the text of an inbound
 #: message the moment one of them is in the list.
 #:
-#: `send_typing_indicator` belongs here too, and IS used by this example:
-#: `AgnoAttendant.show_typing` (`agent.py`) calls it directly through the raw
-#: MCP session, with a recipient THIS CODE computed from the verified
-#: webhook sender, never through the model's own tool-calling loop. That is
-#: what keeps it safe despite having exactly the shape this set exists to
-#: keep off `ALLOWED_TOOLS`.
+#: `send_text` and `send_typing_indicator` belong here too, and BOTH are used by
+#: this example: `AgnoAttendant.send_answer` and `AgnoAttendant.show_typing`
+#: (`agent.py`) call them directly through the raw MCP session, with a
+#: recipient THIS CODE computed from the verified webhook, never through the
+#: model's own tool-calling loop. That is what keeps them safe despite having
+#: exactly the shape this set exists to keep off `ALLOWED_TOOLS`.
 ARBITRARY_RECIPIENT_TOOLS = frozenset(
     {
         "send_text",
@@ -47,15 +48,32 @@ def test_disconnect_number_is_absent() -> None:
     assert "disconnect_number" not in ALLOWED_TOOLS
 
 
-def test_the_allowlist_is_exactly_what_answering_requires() -> None:
+def test_the_model_can_only_read_one_message() -> None:
     """Stated by name so widening it is a deliberate edit to this test too.
 
     This single exact-set assertion is what makes the narrower checks above
     (no arbitrary-recipient tool, no `disconnect_number`) implied by it, not
     redundant with it: those two exist for their own documentation value, not
-    because this one could miss what they catch.
+    because this one could miss what they catch. The model gets NO send tool:
+    the answer is the text it writes, and this application sends it.
     """
-    assert set(ALLOWED_TOOLS) == {"get_message", "reply_to_message"}
+    assert set(ALLOWED_TOOLS) == {"get_message"}
+
+
+def test_reply_to_message_is_not_given_to_the_model() -> None:
+    """It always quotes the message it answers, which a person does not do.
+
+    Not a safety property (the tool takes no recipient), so it is pinned on its
+    own: someone "restoring" it for convenience would bring back the quote on
+    every answer without any test going red.
+    """
+    assert "reply_to_message" not in ALLOWED_TOOLS
+
+
+def test_the_tool_that_delivers_the_answer_exists_on_the_server() -> None:
+    """The send is code, so a typo in its name only fails at the first real answer."""
+    assert SEND_TOOL == "send_text"
+    assert SEND_TOOL in KNOWN_MCP_TOOL_NAMES
 
 
 def test_the_allowlist_only_names_tools_the_server_actually_exposes() -> None:
@@ -111,9 +129,7 @@ class TestBuildMcpTools:
         return settings_ignoring_dotenv(**base)
 
     def test_it_uses_the_configured_url(self) -> None:
-        tools = build_mcp_tools(
-            self._settings(turbo_notify_mcp_url="https://mcp.turbonotify.com")
-        )
+        tools = build_mcp_tools(self._settings(turbo_notify_mcp_url="https://mcp.turbonotify.com"))
         assert tools.url == "https://mcp.turbonotify.com"
 
     def test_it_uses_streamable_http(self) -> None:
@@ -137,6 +153,14 @@ class TestBuildMcpTools:
         # only `| None` because `MCPTools` also serves callers who omit it.
         assert tools.include_tools is not None
         assert set(tools.include_tools) == set(ALLOWED_TOOLS)
+
+
+def test_the_instructions_say_the_final_message_is_the_answer() -> None:
+    """The model must know it writes the answer and has nothing to send it with."""
+    assert "final message is the answer" in INSTRUCTIONS
+    assert "no tool for sending" in INSTRUCTIONS
+    assert "reply_to_message" not in INSTRUCTIONS
+    assert "send_text" not in INSTRUCTIONS
 
 
 def test_the_instructions_treat_get_message_results_as_customer_data() -> None:

@@ -22,7 +22,6 @@ from typing import Any
 
 import httpx
 import pytest
-from agno.models.response import ToolExecution
 from agno.run.agent import RunOutput
 from agno.run.base import RunStatus
 from asgi_lifespan import LifespanManager
@@ -36,37 +35,23 @@ SECRET = "whsec_example"
 ENDPOINT = "/webhooks/turbo-notify"
 
 
-def _reply_call(refused: str | None = None) -> ToolExecution:
-    """One tool call, built from the agent library's OWN type, not a stub.
+DELIVERED = json.dumps({"message_id": "msg_" + "f" * 32, "status": {"state": "pending"}})
 
-    A stub with only `tool_name`/`tool_call_error` cannot express a refusal,
-    which arrives as result TEXT on a call the library records as successful.
-    That gap is what let a broken `read_outcome` pass a green suite.
+
+def fake_run(*, silent: bool = False) -> RunOutput:
+    """One finished turn: the model wrote an answer, or (``silent``) nothing.
+
+    The answer is the run's text. Sending it is the application's job, so the
+    fake attendant below records it instead of any tool call.
     """
-    return ToolExecution(
-        tool_name="reply_to_message",
-        tool_call_error=False,
-        result=(
-            f"Error from MCP tool 'reply_to_message': {refused}"
-            if refused
-            else json.dumps({"message_id": "msg_" + "f" * 32, "status": {"state": "pending"}})
-        ),
+    return RunOutput(
+        status=RunStatus.completed,
+        content="" if silent else "Quotas are counted per number.",
     )
 
 
-def fake_run(*, silent: bool = False, refused: str | None = None) -> RunOutput:
-    """One finished turn.
-
-    The default called `reply_to_message` and it succeeded, because that call is
-    what makes a reply a reply. ``silent`` is the run that answers nobody;
-    ``refused`` is the server turning the reply down.
-    """
-    tools = [] if silent else [_reply_call(refused)]
-    return RunOutput(status=RunStatus.completed, tools=tools)
-
-
 class FakeAttendant:
-    """Records the prompts it was asked to answer."""
+    """Records the prompts it was asked to answer and the answers it was asked to send."""
 
     def __init__(
         self,
@@ -75,24 +60,35 @@ class FakeAttendant:
         silent: bool = False,
         refused: str | None = None,
         fail_typing: bool = False,
+        unreachable: bool = False,
     ) -> None:
         self.prompts: list[str] = []
         self.typing_calls: list[Any] = []
+        self.sent: list[tuple[Any, str]] = []
         self.fail = fail
         self.silent = silent
         self.refused = refused
         self.fail_typing = fail_typing
+        self.unreachable = unreachable
 
     async def arun(self, input: str) -> object:  # noqa: A002 - the library's name
         if self.fail:
             raise RuntimeError("the model is down")
         self.prompts.append(input)
-        return fake_run(silent=self.silent, refused=self.refused)
+        return fake_run(silent=self.silent)
 
     async def show_typing(self, question: Any) -> None:
         if self.fail_typing:
             raise RuntimeError("the MCP server is down")
         self.typing_calls.append(question)
+
+    async def send_answer(self, question: Any, text: str) -> str:
+        if self.unreachable:
+            raise ConnectionError("the MCP server is down")
+        self.sent.append((question, text))
+        if self.refused:
+            return f"Error from MCP tool 'send_text': {self.refused}"
+        return DELIVERED
 
 
 class _FlakyThenWorkingAttendant(FakeAttendant):
@@ -220,7 +216,34 @@ class TestSignedDeliveries:
         prompt = attendant.prompts[0]
         assert "How do quotas work?" in prompt
         assert "msg_" + "a" * 32 in prompt
-        assert "reply_to_message" in prompt
+        assert "get_message" in prompt
+        assert "reply_to_message" not in prompt
+
+    async def test_the_answer_is_sent_as_a_normal_message_to_the_sender(self) -> None:
+        """The whole path: webhook in, the model's text out, to the verified sender."""
+        attendant = FakeAttendant()
+        body = _received_body()
+
+        async with _client(attendant) as client:
+            await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert len(attendant.sent) == 1
+        question, text = attendant.sent[0]
+        assert text == "Quotas are counted per number."
+        assert question.from_number == "5511999999999"
+        assert question.group_id is None
+        assert question.event_id == "evt_" + "e" * 32
+
+    async def test_a_group_answer_is_sent_to_the_group(self) -> None:
+        attendant = FakeAttendant()
+        settings = _settings(answer_group_messages=True)
+        body = _received_body(to={"group_id": "grp_" + "b" * 32})
+
+        async with _client(attendant, settings) as client:
+            await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        question, _ = attendant.sent[0]
+        assert question.group_id == "grp_" + "b" * 32
 
     async def test_typing_is_shown_to_the_sender_before_the_answer(self) -> None:
         """`show_typing` runs before `arun`: the whole point is covering the
@@ -436,7 +459,8 @@ class TestFailureIsolation:
         """The failure mode that produced a clean log through a live outage.
 
         The model was pointed at a retired id, every call came back 404, and the
-        agent library returned each run rather than raising. The endpoint logged
+        agent library returned each run rather than raising (here: a run that
+        wrote no answer). The endpoint logged
         `Answered msg_… on main` every time, so the only place the outage was
         visible was the customer's silent phone.
         """
@@ -450,6 +474,35 @@ class TestFailureIsolation:
         assert "Answered" not in caplog.text
         assert "Did not answer" in caplog.text
         assert "msg_" + "a" * 32 in caplog.text
+
+    async def test_a_refused_send_is_logged_with_its_reason_and_released(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """A refusal is not an answer, and the redelivery must still be tried."""
+        attendant = FakeAttendant(refused="payment_required: quota_exceeded")
+        body = _received_body()
+
+        with caplog.at_level("INFO"):
+            async with _client(attendant) as client:
+                await client.post(ENDPOINT, content=body, headers=_signed(body))
+                await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert "Answered" not in caplog.text
+        assert "refused" in caplog.text and "quota_exceeded" in caplog.text
+        assert len(attendant.sent) == 2, "the failed attempt locked the event id"
+
+    async def test_an_unreachable_send_is_logged_as_unreachable(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        attendant = FakeAttendant(unreachable=True)
+        body = _received_body()
+
+        with caplog.at_level("INFO"):
+            async with _client(attendant) as client:
+                await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert "Answered" not in caplog.text
+        assert "unreachable" in caplog.text
 
     async def test_a_long_tool_result_is_truncated_before_it_reaches_the_log(
         self, caplog: pytest.LogCaptureFixture

@@ -101,7 +101,7 @@ how to present the file. If someone asks for a voice message, say it is not
 available rather than suggesting a MIME type.
 
 Voice notes an organization *receives* can be transcribed automatically, but
-only when Bring-Your-Own Speech-to-Text is configured for the number, under
+only when Bring-Your-Own Speech-to-Text is configured for the organization, under
 **Transcription** in the dashboard (**Transcrição** when it is in Portuguese).
 Without it, an inbound voice note still arrives (transcription never blocks the message itself), but its transcript
 comes back unavailable with reason `not_configured`; the other five reasons

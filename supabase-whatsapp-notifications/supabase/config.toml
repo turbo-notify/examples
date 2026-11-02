@@ -1,0 +1,6 @@
+# Only the part this example needs. `supabase init` writes the full file; keep this block in it.
+
+# The database calls the function without a user token, so the platform's JWT check is off. The
+# function checks the `x-webhook-secret` header itself and refuses everything else.
+[functions.notify-whatsapp]
+verify_jwt = false

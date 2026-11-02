@@ -22,6 +22,7 @@ own code would.
 | Example | What it shows |
 |---|---|
 | [**agno-support-agent**](./agno-support-agent) | A WhatsApp support attendant that answers questions about Turbo Notify, built with [Agno](https://agno.com) and driven entirely through the [Turbo Notify MCP Server](https://docs.turbonotify.com/agents/mcp-server/). Receives inbound messages by webhook, has an LLM write the answer (its only tool reads one message), and sends it as a normal message through the MCP server. |
+| [**supabase-whatsapp-notifications**](./supabase-whatsapp-notifications) | A WhatsApp message when a row changes in a [Supabase](https://supabase.com) project: a Database Webhook calls an Edge Function (Deno, no dependencies) that sends the message through the Turbo Notify API. Sends only to rows that opted in, sends each event once, and keeps phone numbers and keys out of the logs. |
 
 More are coming. If you build something worth showing, open a pull request.
 

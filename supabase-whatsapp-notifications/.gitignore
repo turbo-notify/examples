@@ -1,0 +1,7 @@
+
+# Supabase CLI working files and local function secrets
+supabase/.temp/
+supabase/.branches/
+supabase/functions/.env
+supabase/functions/.env.*
+!supabase/functions/.env.example

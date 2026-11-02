@@ -62,8 +62,9 @@ supabase/
 1. Copy `supabase/functions/notify-whatsapp` into your project, and add the `[functions.notify-whatsapp]`
    block from `supabase/config.toml` to yours. `verify_jwt` is off because the database calls the
    function without a user token; the secret header is the check.
-2. Apply the sample table (`supabase db push`), or use your own table with a `phone` column in
-   international format and a `whatsapp_opt_in` column.
+2. Apply the sample table to your project (`supabase db push --remote`; without `--remote`, version 3 of the CLI
+   pushes to the local database, and older versions use `--linked`), or use your own table with a `phone`
+   column in international format and a `whatsapp_opt_in` column.
 3. Set the secrets. `WEBHOOK_SECRET` is any long random string:
 
    ```text
@@ -72,14 +73,17 @@ supabase/
    ```
 
    `.env.example` lists every setting (`TN_NUMBER` and `TN_API_BASE_URL` are optional).
-4. Deploy: `supabase functions deploy notify-whatsapp`.
+4. Deploy: `supabase functions deploy notify-whatsapp`. The CLI bundles the function in a container, so Docker
+   has to be running.
 5. Create the webhook in the Supabase dashboard (Integrations, Database Webhooks): your table, the Insert
    and Update events, type Supabase Edge Functions, function `notify-whatsapp`, method `POST`, and the
    HTTP header `x-webhook-secret` with the value you generated. Creating it in the dashboard keeps the
    secret out of your repository. `webhook.sql` is the same thing as SQL, for when you prefer that: replace
-   the two placeholders first and do not commit the result. Webhooks rely on the `pg_net` extension: the
-   dashboard turns it on for you, and the first statement of `webhook.sql` does the same. Without it, every
-   insert and update on the table fails with `schema "net" does not exist`.
+   the two placeholders first and do not commit the result. On a hosted project, enable Database Webhooks once
+   in the dashboard before applying it: the file uses the `supabase_functions` schema, which a project that
+   never enabled webhooks does not have (the file then fails with `schema "supabase_functions" does not exist`
+   and changes nothing). Webhooks also rely on the `pg_net` extension: the first statement of `webhook.sql` turns
+   it on. Without it, every insert and update on the table fails with `schema "net" does not exist`.
 
 ## Try it
 
@@ -153,9 +157,16 @@ reaches the logs.
   database trigger created by `webhook.sql` fired the function; a row with consent produced a WhatsApp message on
   the phone; the same event sent twice produced one message; a status change to `shipped` produced the second
   message; a row without consent sent nothing. Running that path is how the `pg_net` requirement above was found.
-- A hosted Supabase project has not been tried yet. The deploy commands and the dashboard webhook settings follow
-  Supabase's documentation. The function does not depend on Supabase calling it again after a failed answer: the
-  same event is sent once either way.
+- A hosted Supabase project (a new, empty one): `db push --remote` applied the table, `secrets set` and
+  `functions deploy` put the function online, and the "Try it" calls answered as documented (`401` without the
+  secret, `{"skipped":"no_opt_in"}` for a row without consent). With a trigger calling `pg_net` the way the
+  webhook does, an inserted row with consent produced a WhatsApp message on the phone, a status change to
+  `shipped` produced the second one, and the same event posted again returned the same `message_id` (one
+  message). Running it is how the `supabase_functions` requirement above and the CLI notes in step 2 and 4 were
+  found. Not run on a hosted project: `webhook.sql` itself (it needs the dashboard step above) and the dashboard
+  form for the webhook.
+- The function does not depend on Supabase calling it again after a failed answer: the same event is sent once
+  either way.
 
 ## Licence
 

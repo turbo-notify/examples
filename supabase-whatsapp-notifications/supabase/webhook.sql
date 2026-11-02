@@ -1,12 +1,15 @@
 -- Database Webhook for the sample table, written as SQL.
 --
--- A Database Webhook calls the function through the pg_net extension. The Supabase dashboard turns it on
--- when you create a webhook there; applying this file does not, and without it every INSERT and UPDATE on
--- the table fails ("schema net does not exist"). The first statement below turns it on.
+-- A Database Webhook calls the function through the pg_net extension. Without it every INSERT and UPDATE
+-- on the table fails ("schema net does not exist"). The first statement below turns it on.
 --
--- You can create the same webhook in the dashboard (Integrations, Database Webhooks) instead, which
--- keeps the secret out of any file. If you apply this file, replace the two placeholders first and
--- do not commit the result:
+-- On a hosted project, enable Database Webhooks once in the dashboard (Integrations, Database Webhooks)
+-- before applying this file. The triggers below use the supabase_functions schema, and a project that never
+-- enabled webhooks does not have it: the file then fails with `schema "supabase_functions" does not exist`
+-- and changes nothing. The local Supabase stack already has the schema.
+--
+-- You can create the same webhook in the dashboard instead, which keeps the secret out of any file.
+-- If you apply this file, replace the two placeholders first and do not commit the result:
 --
 --   <PROJECT_REF>     your project reference (the part before .supabase.co)
 --   <WEBHOOK_SECRET>  the same value you set with `supabase secrets set WEBHOOK_SECRET=...`

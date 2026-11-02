@@ -223,6 +223,6 @@ person holding the phone, so they stay in the dashboard.
 - Documentation: <https://docs.turbonotify.com>
 - Dashboard: <https://dashboard.turbonotify.com>
 - Webhook Inspector, for testing deliveries: <https://webhook.turbonotify.com>
-- MCP server reference: <https://docs.turbonotify.com/general/mcp-server/>
+- MCP server reference: <https://docs.turbonotify.com/agents/mcp-server/>
 - Building an AI agent: <https://docs.turbonotify.com/guides/ai-agent/>
 - Support: <support@turbonotify.com>, sales and resale: <sales@turbonotify.com>

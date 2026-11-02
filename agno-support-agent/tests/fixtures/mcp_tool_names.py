@@ -7,7 +7,7 @@ connection.
 
 **How to refresh this list**, after a tool is added, renamed or removed on the
 server: either read the tool catalogue table in
-<https://docs.turbonotify.com/general/mcp-server/#ferramentas>, or connect to
+<https://docs.turbonotify.com/agents/mcp-server/#ferramentas>, or connect to
 a running server and call `tools/list` yourself, for example:
 
     from mcp import ClientSession
@@ -27,7 +27,7 @@ Then replace the frozenset below with the result.
 from __future__ import annotations
 
 #: 36 tools, as of the tool catalogue documented at
-#: <https://docs.turbonotify.com/general/mcp-server/>.
+#: <https://docs.turbonotify.com/agents/mcp-server/>.
 KNOWN_MCP_TOOL_NAMES: frozenset[str] = frozenset(
     {
         # Sending.

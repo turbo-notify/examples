@@ -21,7 +21,7 @@ own code would.
 
 | Example | What it shows |
 |---|---|
-| [**agno-support-agent**](./agno-support-agent) | A WhatsApp support attendant that answers questions about Turbo Notify, built with [Agno](https://agno.com) and driven entirely through the [Turbo Notify MCP Server](https://docs.turbonotify.com/general/mcp-server/). Receives inbound messages by webhook, has an LLM write the answer (its only tool reads one message), and sends it as a normal message through the MCP server. |
+| [**agno-support-agent**](./agno-support-agent) | A WhatsApp support attendant that answers questions about Turbo Notify, built with [Agno](https://agno.com) and driven entirely through the [Turbo Notify MCP Server](https://docs.turbonotify.com/agents/mcp-server/). Receives inbound messages by webhook, has an LLM write the answer (its only tool reads one message), and sends it as a normal message through the MCP server. |
 
 More are coming. If you build something worth showing, open a pull request.
 

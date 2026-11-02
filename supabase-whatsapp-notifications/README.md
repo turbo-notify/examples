@@ -77,7 +77,9 @@ supabase/
    and Update events, type Supabase Edge Functions, function `notify-whatsapp`, method `POST`, and the
    HTTP header `x-webhook-secret` with the value you generated. Creating it in the dashboard keeps the
    secret out of your repository. `webhook.sql` is the same thing as SQL, for when you prefer that: replace
-   the two placeholders first and do not commit the result.
+   the two placeholders first and do not commit the result. Webhooks rely on the `pg_net` extension: the
+   dashboard turns it on for you, and the first statement of `webhook.sql` does the same. Without it, every
+   insert and update on the table fails with `schema "net" does not exist`.
 
 ## Try it
 
@@ -101,6 +103,36 @@ TN_API_KEY=YOUR_KEY WEBHOOK_SECRET=local-secret \
 
 and post the same JSON to `http://localhost:8000/`.
 
+## Run it on your machine with the Supabase CLI
+
+This is the whole path (database trigger, Edge Function, Turbo Notify API) without a hosted project. It needs
+Docker and the Supabase CLI, and it sends **one real WhatsApp message**, so use your own number.
+
+```text
+supabase init
+cp -R <this example>/supabase/functions/notify-whatsapp supabase/functions/
+cp <this example>/supabase/migrations/*.sql supabase/migrations/
+# add the [functions.notify-whatsapp] block from this example's supabase/config.toml to yours
+
+supabase start -x gotrue,realtime,storage-api,imgproxy,mailpit,postgrest,postgres-meta,studio,logflare,vector,supavisor
+supabase functions serve --env-file supabase/functions/.env
+```
+
+`supabase start` applies the migration. Put your key and a secret in `supabase/functions/.env` (see
+`.env.example`), then apply `webhook.sql` with the placeholders replaced. On the local stack the database runs in
+a container, so the function address is `http://host.docker.internal:54321/functions/v1/notify-whatsapp`:
+
+```text
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" -f webhook.sql
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -c "insert into public.orders (phone, whatsapp_opt_in) values ('+YOUR_NUMBER', true);"
+psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" \
+  -c "select status_code, content from net._http_response order by id desc limit 1;"
+```
+
+The last query shows what the function answered (`{"sent":true,"message_id":"msg_..."}`). Stop everything with
+`supabase stop --no-backup`.
+
 ## Tests
 
 ```text
@@ -114,16 +146,16 @@ The tests cover the request the function sends, the secret check, consent, phone
 rules, the idempotency key, the mapping of every answer from Turbo Notify, and that nothing sensitive
 reaches the logs.
 
-## What has not been verified
+## How it was tested
 
-- Deploying to a hosted Supabase project, and the Database Webhook calling the function. The commands
-  and the webhook settings follow Supabase's documentation; they have not been run on a hosted project
-  or on the local Supabase stack for this example.
-- A message delivered through the whole path. The function was run over HTTP against a stand-in for the
-  Turbo Notify API, and `webhook.sql` was applied to a database with a stand-in for Supabase's webhook
-  function.
-- Whether Supabase calls the function again after an answer that is not a success. The function does not
-  depend on it.
+- The unit tests, `deno check`, `deno lint` and `deno fmt --check`.
+- The whole path on the local Supabase stack, with the real Edge Function runtime and the real Turbo Notify API: a
+  database trigger created by `webhook.sql` fired the function; a row with consent produced a WhatsApp message on
+  the phone; the same event sent twice produced one message; a status change to `shipped` produced the second
+  message; a row without consent sent nothing. Running that path is how the `pg_net` requirement above was found.
+- A hosted Supabase project has not been tried yet. The deploy commands and the dashboard webhook settings follow
+  Supabase's documentation. The function does not depend on Supabase calling it again after a failed answer: the
+  same event is sent once either way.
 
 ## Licence
 

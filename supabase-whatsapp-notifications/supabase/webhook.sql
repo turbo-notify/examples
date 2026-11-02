@@ -1,5 +1,9 @@
 -- Database Webhook for the sample table, written as SQL.
 --
+-- A Database Webhook calls the function through the pg_net extension. The Supabase dashboard turns it on
+-- when you create a webhook there; applying this file does not, and without it every INSERT and UPDATE on
+-- the table fails ("schema net does not exist"). The first statement below turns it on.
+--
 -- You can create the same webhook in the dashboard (Integrations, Database Webhooks) instead, which
 -- keeps the secret out of any file. If you apply this file, replace the two placeholders first and
 -- do not commit the result:
@@ -9,6 +13,8 @@
 --
 -- Local development: the database runs in a container, so use
 -- http://host.docker.internal:54321/functions/v1/notify-whatsapp as the URL.
+
+create extension if not exists pg_net;
 
 create trigger notify_whatsapp_on_insert
 after insert on public.orders

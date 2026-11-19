@@ -126,7 +126,7 @@ Writing `@<number>` in message text mentions that person, e.g.
 
 A contact belongs to a **number**, not to the organization: the same person
 reached from the main number and from an extra number is two contacts with two
-different `ct_…` ids. An id from one inbox does not resolve in another.
+different `ct_…` ids. An id from one number does not resolve in another.
 
 Contacts appear only through real traffic. Turbo Notify never reads the phone's
 address book, so a person the organization has not messaged simply is not there.
@@ -174,7 +174,7 @@ sets a signing secret (recommended), every delivery is signed:
 than about five minutes should be rejected.
 
 Events that belong to one of the customer's numbers carry a `number_alias`
-saying which inbox it is. Consumers need it, because message and contact ids are
+saying which number it is. Consumers need it, because message and contact ids are
 unique but not self-addressing. Three events are about the account as a whole and
 carry no `number_alias` at all: `storage.degraded`, `storage.recovered` and
 `media.unavailable`. Read the field as optional.
@@ -204,10 +204,12 @@ and it is gated by the same plan feature as detailed read receipts (BUSINESS and
 above). The sender sees those messages as read on WhatsApp.
 
 It is hosted by Turbo Notify, over Streamable HTTP at
-`https://mcp.turbonotify.com`, with the API key in the `Authorization`
-header of every call. One address serves everybody, and the key is what says
-whose account it is, so there is nothing to install and nothing to run: any MCP
-host that accepts a remote server points at that URL.
+`https://mcp.turbonotify.com`. A person connecting a client such as Claude,
+ChatGPT or Codex adds only the address, signs in to Turbo Notify and approves
+the access: no key is needed. An API key in the `Authorization` header of every
+call is for clients that cannot sign in and for agents that run unattended. One
+address serves everybody, so there is nothing to install and nothing to run: any
+MCP host that accepts a remote server points at that URL.
 
 A key created with the **Acesso total** (full access) template reaches all 36 tools. A scoped key needs
 the scope of each family it uses, and two of those surprise people: replying,

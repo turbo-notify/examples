@@ -57,7 +57,7 @@ logger = logging.getLogger("support_agent.agent")
 #:
 #: **The read tools are absent, and that is the less obvious half.** An API key
 #: is scoped to the ORGANIZATION, not to one conversation, so `list_messages`,
-#: `list_contacts` and `list_groups` return the whole inbox for any number that
+#: `list_contacts` and `list_groups` return everything on any number that
 #: key reaches. Handing those to an agent that answers strangers means
 #: "summarise what the last customer asked you" is a request it is equipped to
 #: satisfy, and the answer is then sent back to whoever asked. The attendant's
@@ -75,7 +75,7 @@ ALLOWED_TOOLS = (
     # The notification carries a 50-character preview, never the body, so this
     # read is what makes answering possible at all. It is not "aimable" the way
     # a listing is: it takes ONE message id, and the ids are unguessable hex, so
-    # a crafted message cannot walk it across an inbox. `list_messages` would
+    # a crafted message cannot walk it across a number. `list_messages` would
     # be, which is why it stays out.
     "get_message",
 )

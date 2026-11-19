@@ -294,14 +294,14 @@ because a tool always adds one.
 
 **The half that is easy to miss: reading.** A Turbo Notify API key is scoped to the
 **organization**, not to a conversation. `list_messages`, `list_contacts` and `list_groups` return
-the whole inbox, for any number that key reaches, and they take the number alias as an argument the
+everything on any number that key reaches, and they take the number alias as an argument the
 model chooses. Hand those to an attendant that answers strangers and "summarise the last few
 messages this number received" becomes a request it can satisfy, with the answer sent straight back
 to whoever asked. So every listing tool is absent.
 
 `get_message` is the exception, and the line is worth stating: it takes **one** message id, the
-unguessable one the notification handed the agent. A crafted message cannot walk it across an
-inbox the way it could walk a listing. It is also not optional: a webhook carries a
+unguessable one the notification handed the agent. A crafted message cannot walk it across a
+number the way it could walk a listing. It is also not optional: a webhook carries a
 50-character `preview`, never the body, so this is the call that turns a notification into a
 question the agent can actually answer.
 

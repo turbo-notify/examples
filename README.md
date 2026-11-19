@@ -41,8 +41,8 @@ meant to be readable start to finish in a few minutes.
 
 ## A note on the MCP server
 
-Several examples reach Turbo Notify through the **Model Context Protocol** rather than by calling
-REST endpoints directly. That is not a different API: it is the same public API, presented as
+Some examples reach Turbo Notify through the **Model Context Protocol** (`agno-support-agent`) rather than
+by calling REST endpoints directly (`supabase-whatsapp-notifications`). That is not a different API: it is the same public API, presented as
 tools an LLM can choose between, with schemas it can read.
 
 If you are building an agent, that is usually what you want: you describe the goal, and the model

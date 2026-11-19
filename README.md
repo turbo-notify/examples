@@ -1,10 +1,10 @@
 # WhatsApp examples with Turbo Notify
 
 > **Em português:** exemplos de WhatsApp pelo seu próprio número, feitos com o
-> [Turbo Notify](https://turbonotify.com): um atendente de IA que responde aos seus clientes e uma
+> [Turbo Notify](https://turbonotify.com): um atendente virtual (IA) que responde aos seus clientes e uma
 > mensagem para o cliente quando uma linha muda no seu banco de dados. Cada exemplo é um projeto
 > independente: clone, preencha as variáveis de ambiente e rode. O primeiro,
-> [`agno-support-agent`](./agno-support-agent), é um atendente de WhatsApp feito com Agno que
+> [`agno-support-agent`](./agno-support-agent), é um atendente virtual de WhatsApp feito com Agno que
 > responde pelo servidor MCP do Turbo Notify. Para montar o seu próprio agente passo a passo, veja
 > o [guia de agentes de IA](https://docs.turbonotify.com/guides/ai-agent/). O restante deste repositório está em inglês.
 

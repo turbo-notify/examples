@@ -1,6 +1,6 @@
 # WhatsApp Support Agent with Agno and MCP
 
-> **Em português:** um atendente de WhatsApp que responde perguntas sobre o Turbo Notify. Ele
+> **Em português:** um atendente virtual de WhatsApp que responde perguntas sobre o Turbo Notify. Ele
 > recebe as mensagens por webhook, decide com um modelo de linguagem e responde pelo servidor MCP
 > do Turbo Notify (hospedado em `https://mcp.turbonotify.com`, autenticado com a sua API Key). Você
 > precisa de uma conta com um número conectado (no dashboard, em **Números**), de uma API Key (em

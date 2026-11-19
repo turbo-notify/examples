@@ -1,4 +1,4 @@
-# Support Agent with Agno and MCP
+# WhatsApp Support Agent with Agno and MCP
 
 > **Em português:** um atendente de WhatsApp que responde perguntas sobre o Turbo Notify. Ele
 > recebe as mensagens por webhook, decide com um modelo de linguagem e responde pelo servidor MCP
@@ -13,9 +13,7 @@ webhook, decides with an LLM, and talks to WhatsApp **through the Turbo Notify M
 tools any agent gets. The model reads with one tool and writes the answer; this app sends it as a
 normal message, so a stranger's text can never choose who receives it.
 
-About 1,600 lines of source across six small modules, and more than that again in tests (the
-suite is deliberately as thorough as the code it covers). A good third of the source is comments
-explaining why, not what.
+About 1,600 lines of source across six small modules, with more than that again in tests.
 
 Read it in ten minutes, then change the knowledge file and the instructions and it is answering
 questions about *your* product instead.

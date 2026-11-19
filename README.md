@@ -1,14 +1,15 @@
-# Turbo Notify Examples
+# WhatsApp examples with Turbo Notify
 
-> **Em português:** exemplos prontos de uso do [Turbo Notify](https://turbonotify.com), o WhatsApp
-> para o seu sistema, os seus agentes de IA e os seus clientes. Cada exemplo é um projeto
+> **Em português:** exemplos de WhatsApp pelo seu próprio número, feitos com o
+> [Turbo Notify](https://turbonotify.com): um atendente de IA que responde aos seus clientes e uma
+> mensagem para o cliente quando uma linha muda no seu banco de dados. Cada exemplo é um projeto
 > independente: clone, preencha as variáveis de ambiente e rode. O primeiro,
 > [`agno-support-agent`](./agno-support-agent), é um atendente de WhatsApp feito com Agno que
 > responde pelo servidor MCP do Turbo Notify. Para montar o seu próprio agente passo a passo, veja
 > o [guia de agentes de IA](https://docs.turbonotify.com/guides/ai-agent/). O restante deste repositório está em inglês.
 
-Working examples of building on [Turbo Notify](https://turbonotify.com): WhatsApp for your
-software, your AI agents and your customers.
+Working examples of WhatsApp on your own number, built with [Turbo Notify](https://turbonotify.com): an AI
+attendant that answers your customers, and a message to your customer when a row changes in your database.
 
 Each example is a **self-contained project**: clone it, set a few environment variables, and run
 it. Nothing here depends on anything else in this repository, and nothing here needs access to

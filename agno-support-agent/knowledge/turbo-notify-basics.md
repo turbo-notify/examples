@@ -157,10 +157,14 @@ memory, because they change.
 
 A message's *content* (its text, caption or media reference) also has a
 retention window that is shorter than its metadata. The window is counted in
-hours and every plan starts at 1 hour: Gratuito keeps 1 hour, Lobo Solitário
-lets the customer choose 1 or 7 hours, and Empresarial and Personalizado let the
-customer choose 1, 7, 24 or 72 hours. After that window the content is gone but
-the message is still there: fetching it by id returns the message with
+hours and depends on the plan and on the customer's choice: Gratuito keeps 4
+hours by default (or 1), Lobo Solitário keeps 12 by default and lets the
+customer choose 1, 4, 7 or 12, and Empresarial and Personalizado keep 12 by
+default and let the customer choose 1, 4, 7, 12, 24 or 72 hours. Lobo Solitário
+and Empresarial subscriptions that already existed when these periods took effect
+keep the period they had until the customer changes it. `GET /v1/usage` (the
+`get_usage` tool) gives the period of an account as `content_retention_hours`.
+After that window the content is gone but the message is still there: fetching it by id returns the message with
 `content_expired: true` and empty content. The message's metadata (that it
 existed, its final status, when it was sent or received) stays for 12 months on
 every plan regardless.

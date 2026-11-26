@@ -45,13 +45,17 @@ def test_it_covers_the_topics_this_attendant_gets_asked_about() -> None:
 def test_it_teaches_the_current_retention_and_pairing_facts() -> None:
     """Both were wrong once, and the attendant repeats whatever it reads.
 
-    Content is retained for hours (1 hour on every plan to start), and an expired
-    message is still returned with ``content_expired``, not "not found". A
-    partner's customer can link a number with a pairing code or a QR code.
+    Content is retained for hours (4 by default on the free plan, 12 on the paid
+    ones, up to 72), and an expired message is still returned with
+    ``content_expired``, not "not found". A partner's customer can link a number
+    with a pairing code or a QR code.
     """
-    text = load_knowledge()
+    text = " ".join(load_knowledge().split())
     assert "content_expired" in text
-    assert "1 hour" in text
+    assert "Gratuito keeps 4 hours by default (or 1)" in text
+    assert "Lobo Solitário keeps 12 by default and lets the customer choose 1, 4, 7 or 12" in text
+    assert "1, 4, 7, 12, 24 or 72 hours" in text
+    assert "starts at 1 hour" not in text
     assert "3 fixed days" not in text
     assert "QR code" in text
     # Disconnecting does not stop billing; only removing does.

@@ -234,8 +234,8 @@ The model's final message *is* the answer. `responder.py` asks for it, reads it 
 run, and hands it to `AgnoAttendant.send_answer` (`agent.py`), which sends it with `send_text` as a
 normal message in the chat, the way a person answers. Nothing is quoted: `quoted_message_id` is
 never sent. The recipient is the group id for a group question and the sender's own number
-otherwise, both taken from the verified webhook, and the model's text reaches the call as the
-`text` argument and nowhere else.
+otherwise (their `contact_id` when WhatsApp does not show their number), all taken from the
+verified webhook, and the model's text reaches the call as the `text` argument and nowhere else.
 
 The call carries the webhook's event id as its `idempotency_key`. That id is the same on every
 redelivery of the event, so a send that timed out but went out, or a delivery Turbo Notify retries,
@@ -320,7 +320,8 @@ be: each takes an arbitrary recipient, the exact shape "Give it the tools it nee
 keeps off the model above. They go through the MCP session directly
 (`MCPTools.get_session_for_run().call_tool(...)`), bypassing the model's own tool-calling loop
 entirely, with a recipient this code computed from the verified webhook (the group id for a group
-question, the sender's own number otherwise), never one a crafted message could redirect.
+question, the sender's own number or contact id otherwise), never one a crafted message could
+redirect.
 
 - **`send_text`** delivers the answer, as described above.
 - **`send_typing_indicator`** shows "typing…" the moment a question comes in. Turbo Notify already

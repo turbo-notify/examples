@@ -36,6 +36,9 @@ ANSWERABLE_EVENTS = ("message.received", "message.replied")
 #: single line of the prompt, look like several.
 _CONTROL_CHARACTERS = re.compile(r"[\x00-\x1f\x7f]")
 
+#: A Turbo Notify contact id, the only shape accepted as a recipient.
+_CONTACT_ID = re.compile(r"ct_[0-9a-f]{32}")
+
 #: Long enough for a full voice-note transcript, short enough that a message
 #: designed to bloat the model's turn cannot grow without bound.
 MAX_PREVIEW_LENGTH = 4000
@@ -202,7 +205,8 @@ class Question:
     is_group: bool
     #: Who the answer goes to, and who to show "typing…" to while the model
     #: composes it: the group, if this is a group message, or the sender's own
-    #: number otherwise (see `responder.recipient_arguments`). Never a value the
+    #: number otherwise, or their contact id when WhatsApp does not show their
+    #: number (see `responder.recipient_arguments`). Never a value the
     #: model chose: `send_typing_indicator` and `send_text` both take an
     #: arbitrary recipient, and `AgnoAttendant` calls them directly with THESE
     #: values rather than handing either tool to the model, which is the whole
@@ -218,6 +222,10 @@ class Question:
     #: `transcription` block for at all. See ``responder.build_prompt`` for why
     #: `"not_configured"` gets a different apology than the other five.
     transcription_reason: str | None = None
+    #: The sender's contact id (`ct_…`). The only way to answer a person whose
+    #: number WhatsApp does not show: their `from` has `contact_id` and no
+    #: `number`.
+    from_contact_id: str | None = None
 
 
 def parse_question(
@@ -382,6 +390,9 @@ def parse_question(
     from_number = from_party.get("number") if isinstance(from_party, dict) else None
     if not isinstance(from_number, str) or not from_number:
         from_number = None
+    from_contact_id = from_party.get("contact_id") if isinstance(from_party, dict) else None
+    if not isinstance(from_contact_id, str) or not _CONTACT_ID.fullmatch(from_contact_id):
+        from_contact_id = None
 
     return Question(
         event_id=event_id,
@@ -397,6 +408,7 @@ def parse_question(
         group_id=group_id,
         from_number=from_number,
         transcription_reason=transcription_reason,
+        from_contact_id=from_contact_id,
     )
 
 

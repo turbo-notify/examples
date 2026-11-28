@@ -234,6 +234,29 @@ class TestSignedDeliveries:
         assert question.group_id is None
         assert question.event_id == "evt_" + "e" * 32
 
+    async def test_a_sender_whose_number_is_not_shown_is_answered_by_contact_id(self) -> None:
+        """WhatsApp does not always show a person's number: their `from` then has
+        `contact_id` and no `number`, and the answer goes to that contact."""
+        attendant = FakeAttendant()
+        contact = "ct_" + "c" * 32
+        body = _received_body(**{"from": {"name": "Ana", "contact_id": contact}})
+
+        async with _client(attendant) as client:
+            await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        question, _ = attendant.sent[0]
+        assert question.from_number is None
+        assert question.from_contact_id == contact
+
+    async def test_a_contact_id_of_another_shape_is_not_a_recipient(self) -> None:
+        attendant = FakeAttendant()
+        body = _received_body(**{"from": {"name": "Ana", "contact_id": "5511999999999"}})
+
+        async with _client(attendant) as client:
+            await client.post(ENDPOINT, content=body, headers=_signed(body))
+
+        assert all(q.from_contact_id is None for q, _ in attendant.sent)
+
     async def test_a_group_answer_is_sent_to_the_group(self) -> None:
         attendant = FakeAttendant()
         settings = _settings(answer_group_messages=True)

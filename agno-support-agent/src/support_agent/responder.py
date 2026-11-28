@@ -224,7 +224,8 @@ def build_prompt(question: Question) -> str:
 def recipient_arguments(question: Question) -> dict[str, str] | None:
     """Who an answer (or a "typing…") to this question is addressed to.
 
-    A group if this is a group message, the sender's own number otherwise.
+    A group if this is a group message, the sender's own number otherwise, or
+    their contact id when WhatsApp does not show their number.
     Computed from the verified webhook and from nothing else: this is the one
     place a recipient is ever chosen, and the model never sees it, so no text a
     stranger writes can move it. `None` when the webhook named neither, which
@@ -234,6 +235,8 @@ def recipient_arguments(question: Question) -> dict[str, str] | None:
         return {"group_id": question.group_id}
     if question.from_number:
         return {"number": question.from_number}
+    if question.from_contact_id:
+        return {"contact_id": question.from_contact_id}
     return None
 
 

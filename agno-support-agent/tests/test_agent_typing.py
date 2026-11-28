@@ -47,6 +47,15 @@ class TestRecipientArguments:
         """Enough to build a `Question` at all is not enough to address anyone."""
         assert recipient_arguments(_question(from_number=None)) is None
 
+    def test_a_sender_whose_number_is_not_shown_is_answered_by_contact_id(self) -> None:
+        contact = "ct_" + "c" * 32
+        args = recipient_arguments(_question(from_number=None, from_contact_id=contact))
+        assert args == {"contact_id": contact}
+
+    def test_the_number_wins_when_both_are_known(self) -> None:
+        args = recipient_arguments(_question(from_contact_id="ct_" + "c" * 32))
+        assert args == {"number": "5511999999999"}
+
 
 class _FakeResult:
     def __init__(self, *, is_error: bool = False) -> None:

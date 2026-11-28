@@ -216,7 +216,7 @@ MCPTools(
 )
 ```
 
-That is the whole integration. The server offers 36 tools (`send_text`, `reply_to_message`,
+That is the whole integration. The server offers 37 tools (`send_text`, `reply_to_message`,
 `mark_as_read`, `get_number`, `get_message_quota`, `list_contacts` and the rest) and the model
 picks between whichever ones you hand it. This attendant hands it one, `get_message`, and the
 reasoning is the most transferable thing here: see "Give it the tools it needs, and no others"

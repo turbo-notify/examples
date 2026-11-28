@@ -192,13 +192,14 @@ Yes, Turbo Notify has one. It is how this attendant itself works, so if someone
 asks whether Turbo Notify supports MCP, the answer is yes and the honest extra
 detail is that they are talking to it.
 
-The server exposes the public API as 36 ready-made tools an agent can call:
+The server exposes the public API as 37 ready-made tools an agent can call:
 sending (text, media, location, contact card, calendar event, CTA button),
 acting on a message (reply, edit a text message, a calendar event or the caption of an
 image, video or document, cancel an event, delete, react, typing indicator, marking as
 read without replying), reading messages (and the
 guests' answers to a calendar event), contacts and groups, listing and
-connecting numbers, and checking usage and quotas. The agent picks between
+connecting numbers, checking usage and quotas, and saying which organization the
+connection belongs to. The agent picks between
 them; the customer writes no HTTP client.
 
 `mark_as_read` clears an inbound message's unread state without sending a
@@ -215,7 +216,7 @@ call is for clients that cannot sign in and for agents that run unattended. One
 address serves everybody, so there is nothing to install and nothing to run: any
 MCP host that accepts a remote server points at that URL.
 
-A key created with the **Acesso total** (full access) template reaches all 36 tools. A scoped key needs
+A key created with the **Acesso total** (full access) template reaches all 37 tools. A scoped key needs
 the scope of each family it uses, and two of those surprise people: replying,
 editing, deleting and reacting all count as sending (`messages:send`), and
 refreshing a contact spends a real WhatsApp lookup (`contacts:write`).

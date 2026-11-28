@@ -26,7 +26,7 @@ Then replace the frozenset below with the result.
 
 from __future__ import annotations
 
-#: 36 tools, as of the tool catalogue documented at
+#: 37 tools, as of the tool catalogue documented at
 #: <https://docs.turbonotify.com/agents/mcp-server/>.
 KNOWN_MCP_TOOL_NAMES: frozenset[str] = frozenset(
     {
@@ -74,6 +74,8 @@ KNOWN_MCP_TOOL_NAMES: frozenset[str] = frozenset(
         "get_usage",
         "get_message_quota",
         "get_contact_quota",
+        # The connected account.
+        "get_profile",
     }
 )
 
